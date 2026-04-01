@@ -1,0 +1,5 @@
+ad_id,source_path,brand,campaign,variant,duration_sec,language,split
+brandx-hook-a,C:\ads\brandx\hook-a.mp4,BrandX,SpringLaunch,hook-a,15,en,train
+brandx-hook-b,C:\ads\brandx\hook-b.mp4,BrandX,SpringLaunch,hook-b,15,en,train
+brandy-demo-a,C:\ads\brandy\demo-a.mp4,BrandY,SummerDemo,main,30,en,test
+
