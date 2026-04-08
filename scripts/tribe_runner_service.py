@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from tribev2 import TribeModel
 
-VENV_BIN = str(Path(sys.executable).resolve().parent)
+VENV_BIN = str(Path(sys.executable).parent)
 os.environ["PATH"] = VENV_BIN + os.pathsep + os.environ.get("PATH", "")
 
 app = FastAPI(title="TRIBE Bare Metal Runner")
