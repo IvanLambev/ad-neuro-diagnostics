@@ -9,8 +9,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -26,8 +28,10 @@ services:
     env_file:
       - .env.backend
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -42,6 +46,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
 
   postgres:
@@ -54,9 +63,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adnd -d adnd"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
 volumes:
   redis_data:
   postgres_data:
-

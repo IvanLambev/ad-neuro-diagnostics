@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 dist/
 build/
+node_modules/
 *.egg-info/
 artifacts/
 manifests/
@@ -13,3 +14,4 @@ workspace_local/
 remote_snapshot/
 runtime/
 .env.backend
+apps/web/dist/
