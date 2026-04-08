@@ -92,6 +92,7 @@ Example:
 ```bash
 cd /path/to/repo
 source /path/to/tribev2/.venv/bin/activate
+pip install uv fastapi uvicorn
 python scripts/tribe_runner_service.py
 ```
 

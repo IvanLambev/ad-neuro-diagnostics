@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import threading
 from pathlib import Path
 
@@ -8,6 +10,9 @@ import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from tribev2 import TribeModel
+
+VENV_BIN = str(Path(sys.executable).resolve().parent)
+os.environ["PATH"] = VENV_BIN + os.pathsep + os.environ.get("PATH", "")
 
 app = FastAPI(title="TRIBE Bare Metal Runner")
 gpu_lock = threading.Lock()
