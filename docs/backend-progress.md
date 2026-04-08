@@ -13,6 +13,7 @@
 - [x] Docker stack built and started locally
 - [x] API health endpoint verified locally
 - [x] Redis/Postgres startup ordering fixed with service health checks
+- [x] Hardcoded Postgres credentials removed from tracked files
 
 ## Still Not Done
 
@@ -27,6 +28,7 @@
 - API is reachable locally at `http://localhost:8000/health` and returns `{"status":"ok"}`.
 - `docker compose ps` currently shows `api`, `worker`, `postgres`, and `redis` up.
 - The backend image is production-oriented, so `pytest` is not installed inside the container by default.
+- Compose now requires explicit Postgres env vars instead of shipping a committed password-like value.
 - Full job execution is still blocked until the host-side TRIBE runner is started and reachable from Docker.
 
 ## Important Files

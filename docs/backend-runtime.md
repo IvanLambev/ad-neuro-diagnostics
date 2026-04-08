@@ -100,9 +100,8 @@ Run it under a system service or process manager in production.
 
 1. Start bare-metal TRIBE runner
 2. Copy `.env.backend.example` to `.env.backend`
-3. Set host bind paths
+3. Set host bind paths and a real `ADND_POSTGRES_PASSWORD`
 4. Run `docker compose up -d --build`
 5. Verify:
    - `GET /health` on API
    - `GET /health` on TRIBE runner
-

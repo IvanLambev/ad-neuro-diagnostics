@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +16,12 @@ class Settings(BaseSettings):
     api_prefix: str = "/v1"
 
     data_root: Path = Path("/data")
-    database_url: str = "postgresql+psycopg://adnd:adnd@postgres:5432/adnd"
+    database_url: str | None = None
+    postgres_host: str = "postgres"
+    postgres_port: int = 5432
+    postgres_db: str = "ad_neuro_diagnostics"
+    postgres_user: str = "adnd_app"
+    postgres_password: str | None = None
     redis_url: str = "redis://redis:6379/0"
     result_backend_url: str = "redis://redis:6379/1"
 
@@ -37,6 +43,18 @@ class Settings(BaseSettings):
     gpu_queue: str = "gpu"
     gpu_worker_concurrency: int = 1
 
+    @model_validator(mode="after")
+    def _hydrate_database_url(self) -> "Settings":
+        if self.database_url:
+            return self
+        if not self.postgres_password:
+            raise ValueError("Set ADND_POSTGRES_PASSWORD or ADND_DATABASE_URL before starting the backend.")
+        self.database_url = (
+            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+        return self
+
     @property
     def uploads_root(self) -> Path:
         return self.data_root / "uploads"
@@ -49,4 +67,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

@@ -56,15 +56,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: adnd
-      POSTGRES_USER: adnd
-      POSTGRES_PASSWORD: adnd
+      POSTGRES_DB: ${ADND_POSTGRES_DB:?Set ADND_POSTGRES_DB in .env.backend}
+      POSTGRES_USER: ${ADND_POSTGRES_USER:?Set ADND_POSTGRES_USER in .env.backend}
+      POSTGRES_PASSWORD: ${ADND_POSTGRES_PASSWORD:?Set ADND_POSTGRES_PASSWORD in .env.backend}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U adnd -d adnd"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
