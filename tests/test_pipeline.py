@@ -216,6 +216,14 @@ def test_feature_extraction_and_reports(tmp_path: Path):
     compare = generate_compare_report(paths, "ad-a", "ad-b")
     assert single.exists()
     assert compare.exists()
+    single_text = single.read_text(encoding="utf-8")
+    assert "Quick Read" in single_text
+    assert "What This Means" in single_text
+    assert "Similar Ads You Should Compare Against" in single_text
+    assert "Why The System Thinks That" in single_text
+    assert "Technical Appendix" in single_text
+    assert (paths.reports_dir("ad-a") / "benchmark_summary.json").exists()
+    assert (paths.reports_dir("ad-a") / "similar_ads.csv").exists()
 
 
 def test_baseline_training_writes_outputs(tmp_path: Path):

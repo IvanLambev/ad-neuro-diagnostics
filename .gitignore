@@ -10,3 +10,6 @@ artifacts/
 manifests/
 reports/
 workspace_local/
+remote_snapshot/
+runtime/
+.env.backend

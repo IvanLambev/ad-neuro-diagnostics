@@ -33,12 +33,25 @@ test = [
 download = [
   "yt-dlp>=2024.8.6",
 ]
+backend = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.32,<1.0",
+  "celery[redis]>=5.4,<6.0",
+  "sqlalchemy>=2.0,<3.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "pydantic-settings>=2.6,<3.0",
+  "httpx>=0.28,<1.0",
+  "python-multipart>=0.0.18,<1.0",
+  "PyJWT[crypto]>=2.10,<3.0",
+]
 
 [project.scripts]
 ads = "ad_neuro_diagnostics.cli:app"
+adnd-api = "backend.app:run"
+adnd-worker = "backend.worker:run"
 
 [tool.setuptools.packages.find]
-include = ["ad_neuro_diagnostics*"]
+include = ["ad_neuro_diagnostics*", "backend*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
