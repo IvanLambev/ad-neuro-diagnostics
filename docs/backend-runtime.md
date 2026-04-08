@@ -78,6 +78,7 @@ The backend expects:
 
 - a writable host data root mounted to `/data`
 - a read-only rated reference workspace mounted to `/data/reference/workspace_small`
+- the same host data root exposed to API/worker via `ADND_HOST_DATA_ROOT` so the bare-metal runner can translate container paths back to host paths
 
 The compose file supports:
 

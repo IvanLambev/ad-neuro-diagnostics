@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/v1"
 
     data_root: Path = Path("/data")
+    host_data_root: str | None = None
     database_url: str | None = None
     postgres_host: str = "postgres"
     postgres_port: int = 5432

@@ -14,6 +14,7 @@
 - [x] API health endpoint verified locally
 - [x] Redis/Postgres startup ordering fixed with service health checks
 - [x] Hardcoded Postgres credentials removed from tracked files
+- [x] Bare-metal runner path translation added for Docker-to-host handoff
 
 ## Still Not Done
 
@@ -29,6 +30,7 @@
 - `docker compose ps` currently shows `api`, `worker`, `postgres`, and `redis` up.
 - The backend image is production-oriented, so `pytest` is not installed inside the container by default.
 - Compose now requires explicit Postgres env vars instead of shipping a committed password-like value.
+- The backend now translates `/data/...` container paths to host paths before calling the bare-metal TRIBE runner.
 - Full job execution is still blocked until the host-side TRIBE runner is started and reachable from Docker.
 
 ## Important Files

@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runner-base-url", default=None, help="Optional TRIBE runner base URL to health check.")
     parser.add_argument("--poll-interval", type=float, default=5.0)
     parser.add_argument("--timeout-sec", type=float, default=1800.0)
+    parser.add_argument(
+        "--stop-after-status",
+        default=None,
+        help="Comma-separated statuses that should count as a successful smoke result without waiting for report generation.",
+    )
     return parser.parse_args()
 
 
@@ -54,6 +59,11 @@ def main() -> int:
     base_url = args.api_base_url.rstrip("/")
     api_prefix = args.api_prefix.rstrip("/")
     headers = _headers(args)
+    stop_statuses = {
+        item.strip()
+        for item in (args.stop_after_status or "").split(",")
+        if item.strip()
+    }
 
     with httpx.Client(timeout=60.0) as client:
         api_health = _expect_ok(client.get(f"{base_url}/health"), "API health")
@@ -84,6 +94,17 @@ def main() -> int:
                 "Job polling",
             )
             status = str(job_payload["status"])
+            if stop_statuses and status in stop_statuses:
+                output = {
+                    "api_health": api_health,
+                    "runner_health": runner_health,
+                    "job_id": job_id,
+                    "job_status": status,
+                    "job_progress": job_payload["progress"],
+                    "current_step": job_payload["current_step"],
+                }
+                print(json.dumps(output, indent=2))
+                return 0
             if status == "completed":
                 break
             if status == "failed":
