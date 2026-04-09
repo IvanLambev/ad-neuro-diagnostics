@@ -358,6 +358,17 @@ function ReportContent({ report }: { report: AnalysisReport }) {
           </CardHeader>
           <CardContent className="space-y-6 px-7 pb-7">
             <div>
+              <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Compared with similar ads</div>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
+                {report.peer_takeaways.length ? (
+                  report.peer_takeaways.map((item) => <li key={item}>{item}</li>)
+                ) : (
+                  <li>The peer comparison is still too close to call in plain language.</li>
+                )}
+              </ul>
+            </div>
+            <Separator />
+            <div>
               <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Strong moments</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
                 {report.strengths.length ? report.strengths.map((item) => <li key={item}>{item}</li>) : <li>Signal is still exploratory for strong claims.</li>}
@@ -432,7 +443,7 @@ function ReportContent({ report }: { report: AnalysisReport }) {
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-7 py-6">
             <CardTitle>Moment Timeline</CardTitle>
-            <CardDescription>Use the timestamps like creative review chapters, not just generic peaks.</CardDescription>
+            <CardDescription>Use these windows like creative review chapters, not just isolated spikes.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 px-7 pb-7">
             {report.moments.map((moment) => (

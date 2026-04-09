@@ -78,6 +78,7 @@ export type AnalysisReport = {
     label: string;
     summary: string;
   };
+  peer_takeaways: string[];
   tracks: Record<string, TrackSummary>;
   strengths: string[];
   risks: string[];

@@ -10,8 +10,8 @@ Turn the current report from a compact benchmark summary into a richer creative-
 - [x] Keep the customer-facing language centered on attention, clarity, and memorability
 - [x] Add synchronized ad-and-brain playback to the report
 - [x] Add chapter-style timeline markers, similar to YouTube timestamps
-- [ ] Improve moment quality so they reflect meaningful segments, not just generic peaks
-- [ ] Improve explanations so they tie comparisons to actual ad structure
+- [x] Improve moment quality so they reflect meaningful segments, not just generic peaks
+- [x] Improve explanations so they tie comparisons to actual ad structure
 - [x] Add confidence and percentile framing to reduce false certainty
 
 ## Backend Upgrades
@@ -22,13 +22,13 @@ Turn the current report from a compact benchmark summary into a richer creative-
 - [x] Add confidence bands for each target
 - [x] Add richer similar-ad explanations beyond generic distance language
 - [x] Add peer-relative comparisons for each target
-- [ ] Add narrative summary lines that turn raw metrics into creative guidance
+- [x] Add narrative summary lines that turn raw metrics into creative guidance
 
 ### Timeline and moments
 
 - [x] Promote time as a first-class signal instead of only using summary rows
 - [x] Build chapter-style timeline entries with labels, timestamps, and rationale
-- [ ] Add stronger and weaker moment segmentation over meaningful windows
+- [x] Add stronger and weaker moment segmentation over meaningful windows
 - [x] Include frame index and time range for each moment
 - [x] Attach target-specific impact labels to each moment
 
@@ -42,9 +42,9 @@ Turn the current report from a compact benchmark summary into a richer creative-
 
 ### Event alignment
 
-- [ ] Align activation changes with transcript density and media events
+- [x] Align activation changes with transcript density and media events
 - [x] Add better story labels such as hook, clarity dip, memorability lift, and brand handoff
-- [ ] Connect pacing, cuts, and speech density to moment explanations
+- [x] Connect pacing, cuts, and speech density to moment explanations
 
 ## Frontend Upgrades
 

@@ -86,6 +86,7 @@ export function createApiClient(options: ApiClientOptions) {
         label: "Exploratory profile",
         summary: "The report does not yet have enough structured signals to assign a stronger creative profile.",
       },
+      peer_takeaways: report.peer_takeaways ?? [],
       tracks: normalizedTracks,
       event_alignment: normalizedEvents,
       moments: normalizedMoments,

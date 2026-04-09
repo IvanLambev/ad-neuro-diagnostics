@@ -13,14 +13,14 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 
 ## Next Backend Upgrades
 
-- [ ] Move from simple peak-picking to segmented moments over more meaningful time windows
-- [ ] Improve event alignment from first-pass heuristics into more stable segment-level alignment
+- [x] Move from simple peak-picking to segmented moments over more meaningful time windows
+- [x] Improve event alignment from first-pass heuristics into more stable segment-level alignment
 - [ ] Use ROI timecourses directly in the explanation layer instead of relying mostly on compressed summaries
 - [ ] Add target-specific confidence so attention, clarity, and memorability can differ in certainty
-- [ ] Add peer-relative narrative lines such as "stronger opening hook than similar ads"
+- [x] Add peer-relative narrative lines such as "stronger opening hook than similar ads"
 - [ ] Add calibration and uncertainty language when a new ad is far from the rated library
 - [ ] Add hook score, clarity stability score, value-lift score, and trust-close score
-- [ ] Add segment archetypes such as hook, explainer, emotional lift, brand handoff, and fatigue window
+- [x] Add segment archetypes such as hook, explainer, emotional lift, brand handoff, and fatigue window
 - [ ] Add shareability / social transmission proxy research track
 - [ ] Improve visual event detection from first-pass heuristics into stronger logo, product, and end-card detection
 

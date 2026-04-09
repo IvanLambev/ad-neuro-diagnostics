@@ -215,6 +215,11 @@ function createReport(job: Job): AnalysisReport {
       label: "Punchy opener",
       summary: "The ad appears to win attention early, but the closing payoff is not as settled as the opening beat.",
     },
+    peer_takeaways: [
+      "It starts stronger than similar ads, which should help the hook land faster.",
+      "The message stays steadier than similar ads once the story starts unfolding.",
+      "The close looks less reassuring than similar ads, so the CTA may benefit from a steadier finish.",
+    ],
     tracks: {
       hook_strength: {
         label: "Hook strength",
@@ -308,7 +313,7 @@ function createReport(job: Job): AnalysisReport {
         id: "strong-0",
         start_sec: 0,
         end_sec: 5,
-        label: "Strong hook",
+        label: "Opening hook",
         summary: "The opening gets to the point quickly and is likely to help viewers settle into the ad.",
         impact: ["attention", "clarity"],
         frame_index: 0,
@@ -320,7 +325,7 @@ function createReport(job: Job): AnalysisReport {
         id: "weak-13",
         start_sec: 13,
         end_sec: 19,
-        label: "Potential weak moment",
+        label: "Crowded transition",
         summary: "The message becomes slightly harder to track in this middle section.",
         impact: ["clarity"],
         frame_index: 13,
@@ -332,7 +337,7 @@ function createReport(job: Job): AnalysisReport {
         id: "strong-22",
         start_sec: 22,
         end_sec: 28,
-        label: "Brand lands clearly",
+        label: "CTA close",
         summary: "The brand handoff is one of the strongest closing moments in the demo report.",
         impact: ["memorability"],
         frame_index: 22,

@@ -312,16 +312,144 @@ def _pick_spread_indices(values: pd.Series, top_k: int, largest: bool = True, mi
     return selected
 
 
-def _moment_label(position_ratio: float, is_strong: bool) -> tuple[str, list[str], str]:
-    if is_strong and position_ratio <= 0.2:
-        return "Opening hook", ["attention", "clarity"], "The opening is one of the strongest response windows in the ad."
-    if is_strong and position_ratio >= 0.72:
-        return "Closing memory lift", ["memorability", "attention"], "The later section lands with relatively strong predicted response."
+def _windowed_segment_frame(activation: pd.DataFrame, duration_sec: float) -> pd.DataFrame:
+    if activation.empty:
+        return pd.DataFrame()
+    n_steps = len(activation)
+    if n_steps == 1:
+        return pd.DataFrame(
+            [
+                {
+                    "segment_index": 0,
+                    "start_idx": 0,
+                    "end_idx": 0,
+                    "start_sec": 0.0,
+                    "end_sec": float(duration_sec),
+                    "mid_sec": float(duration_sec) / 2.0,
+                    "mean_abs_mean": float(activation["mean_abs"].iloc[0]),
+                    "max_abs_peak": float(activation["max_abs"].iloc[0]),
+                    "volatility_mean": float(activation["volatility"].iloc[0]),
+                }
+            ]
+        )
+
+    target_window = 2.0 if duration_sec <= 16 else 2.5 if duration_sec <= 32 else 3.5
+    segment_count = max(4, min(8, int(np.ceil(max(duration_sec, 1.0) / target_window))))
+    edges = np.linspace(0, n_steps, num=segment_count + 1, dtype=int)
+
+    rows: list[dict[str, float | int]] = []
+    for segment_index, (start_idx, end_idx) in enumerate(zip(edges[:-1], edges[1:])):
+        if end_idx <= start_idx:
+            continue
+        segment = activation.iloc[start_idx:end_idx]
+        start_sec = float(duration_sec * (start_idx / max(n_steps, 1)))
+        end_sec = float(duration_sec * (end_idx / max(n_steps, 1)))
+        rows.append(
+            {
+                "segment_index": segment_index,
+                "start_idx": int(start_idx),
+                "end_idx": int(end_idx - 1),
+                "start_sec": round(start_sec, 2),
+                "end_sec": round(end_sec, 2),
+                "mid_sec": round((start_sec + end_sec) / 2.0, 2),
+                "mean_abs_mean": float(segment["mean_abs"].mean()),
+                "max_abs_peak": float(segment["max_abs"].max()),
+                "volatility_mean": float(segment["volatility"].mean()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _events_for_window(
+    aligned_events: list[dict[str, object]],
+    start_sec: float,
+    end_sec: float,
+) -> list[dict[str, object]]:
+    return [
+        event
+        for event in aligned_events
+        if float(event["start_sec"]) <= end_sec + 0.75 and float(event["end_sec"]) >= max(start_sec - 0.75, 0.0)
+    ]
+
+
+def _segment_moment_label(
+    start_ratio: float,
+    end_ratio: float,
+    is_strong: bool,
+    segment_events: list[dict[str, object]],
+) -> tuple[str, list[str], str]:
+    event_types = {str(event["type"]) for event in segment_events}
+
     if is_strong:
-        return "High attention beat", ["attention"], "This moment stands out as one of the stronger response windows."
-    if position_ratio <= 0.35:
-        return "Early clarity dip", ["clarity"], "This early segment may be harder to follow than the surrounding moments."
-    return "Potential drop-off", ["attention", "clarity"], "This segment looks weaker than the strongest moments in the ad."
+        if "cta_timing" in event_types or "end_card" in event_types:
+            return (
+                "CTA close",
+                ["memorability", "clarity"],
+                "The closing section looks steadier here, which can help the call to action land more clearly.",
+            )
+        if "product_reveal" in event_types or "product_packshot" in event_types:
+            return (
+                "Product reveal lift",
+                ["attention", "memorability"],
+                "The response lifts around the product-focused reveal, which often helps the offer feel more concrete.",
+            )
+        if "brand_mention" in event_types or "logo_on_screen" in event_types:
+            return (
+                "Brand handoff",
+                ["memorability", "clarity"],
+                "The brand cue lands more cleanly here than in the surrounding windows.",
+            )
+        if "text_overlay" in event_types and start_ratio >= 0.55:
+            return (
+                "Offer explainer beat",
+                ["clarity"],
+                "A more text-forward section still holds up here, which suggests the explainer beat is landing clearly.",
+            )
+        if start_ratio <= 0.2:
+            return (
+                "Opening hook",
+                ["attention", "clarity"],
+                "The first seconds stand out as one of the stronger windows in the ad.",
+            )
+        if end_ratio >= 0.72:
+            return (
+                "Closing memory lift",
+                ["memorability", "attention"],
+                "The later section lands with relatively strong predicted response.",
+            )
+        return "High-response segment", ["attention"], "This section stands out as one of the stronger windows in the ad."
+
+    if "speech_density_peak" in event_types and "scene_cut" in event_types:
+        return (
+            "Crowded transition",
+            ["clarity"],
+            "Sharper cutting and denser speech stack up here, which can make the message harder to track.",
+        )
+    if "text_overlay" in event_types:
+        return (
+            "Text-heavy slowdown",
+            ["clarity"],
+            "This window becomes more caption-heavy, so viewers may need more effort to keep up.",
+        )
+    if "scene_cut" in event_types:
+        return (
+            "Jumpy handoff",
+            ["attention", "clarity"],
+            "A faster pacing shift lands here, which can make the transition feel less settled.",
+        )
+    if start_ratio <= 0.35:
+        return (
+            "Early clarity dip",
+            ["clarity"],
+            "This early section may be harder to follow than the surrounding moments.",
+        )
+    if end_ratio >= 0.72:
+        return (
+            "Soft close",
+            ["memorability", "clarity"],
+            "The closing section loses some lift here, so the brand or CTA may not be landing as firmly as it could.",
+        )
+    return "Potential drop-off", ["attention", "clarity"], "This section looks weaker than the strongest moments in the ad."
 
 
 def _workspace_paths_from_features_dir(features_dir: Path) -> ProjectPaths:
@@ -650,50 +778,140 @@ def _creative_profile(track_payload: dict[str, dict[str, object]]) -> dict[str, 
     }
 
 
-def _moment_payload(features_dir: Path, duration_sec: float, top_k: int = 2) -> list[dict[str, object]]:
+def _peer_takeaways(
+    reference_frame: pd.DataFrame,
+    new_row: pd.Series,
+    neighbors: pd.DataFrame,
+    target_scores: dict[str, dict[str, float]],
+) -> list[str]:
+    takeaways: list[str] = []
+
+    score_rules = [
+        ("attention", "engagement", 0.18, "The opening and overall pull look stronger than similar ads.", "This cut may have a harder time holding people than similar ads."),
+        ("clarity", "confusion", 0.18, "The message reads more clearly than similar ads.", "The message may feel harder to track than similar ads."),
+        ("memorability", "memorability", 0.18, "The close looks more memorable than similar ads.", "The close may leave a weaker memory trace than similar ads."),
+    ]
+    for outward_name, target, threshold, positive, negative in score_rules:
+        score = _safe_float(target_scores.get(outward_name, {}).get("score"))
+        peer_mean = _safe_float(pd.to_numeric(neighbors.get(target), errors="coerce").mean())
+        delta = (score - peer_mean) * TARGET_DIRECTIONS.get(target, 1.0)
+        if delta >= threshold:
+            takeaways.append(positive)
+        elif delta <= -threshold:
+            takeaways.append(negative)
+
+    track_phrases = {
+        "hook_strength": (
+            "It starts stronger than similar ads, which should help the hook land faster.",
+            "The opening looks softer than similar ads, so the first seconds may need a clearer hook.",
+        ),
+        "clarity_stability": (
+            "The message stays steadier than similar ads once the story starts unfolding.",
+            "The middle section looks less settled than similar ads, so the explainer beat may be doing too much at once.",
+        ),
+        "value_lift": (
+            "It builds value later than similar ads instead of peaking too early.",
+            "It does not build as much late-stage lift as similar ads, so the product payoff may arrive too flat.",
+        ),
+        "trust_close": (
+            "The close feels calmer than similar ads, which should help reduce friction near the CTA.",
+            "The close looks less reassuring than similar ads, so the CTA may benefit from a steadier finish.",
+        ),
+    }
+    for track_id, track_def in TRACK_DEFINITIONS.items():
+        weights = track_def["weights"]
+        reference_values = reference_frame.apply(lambda row: _compute_track_value(row, weights, reference_frame), axis=1)
+        std_value = float(reference_values.std(ddof=0)) if len(reference_values) else 1.0
+        if np.isclose(std_value, 0.0):
+            std_value = 1.0
+        new_value = _compute_track_value(new_row, weights, reference_frame)
+        peer_values = neighbors.apply(lambda row: _compute_track_value(row, weights, reference_frame), axis=1)
+        peer_mean = float(peer_values.mean()) if len(peer_values) else 0.0
+        effect = (new_value - peer_mean) / std_value
+        positive, negative = track_phrases[track_id]
+        if effect >= 0.42:
+            takeaways.append(positive)
+        elif effect <= -0.42:
+            takeaways.append(negative)
+
+    ordered: list[str] = []
+    for takeaway in takeaways:
+        if takeaway not in ordered:
+            ordered.append(takeaway)
+        if len(ordered) >= 3:
+            break
+    return ordered
+
+
+def _moment_payload(
+    features_dir: Path,
+    duration_sec: float,
+    aligned_events: list[dict[str, object]],
+    top_k: int = 2,
+) -> list[dict[str, object]]:
     activation_path = features_dir / "activation_strength.csv"
     if not activation_path.exists():
         return []
     activation = pd.read_csv(activation_path)
     if activation.empty:
         return []
-    n = len(activation)
-    seconds_per_step = duration_sec / max(n, 1)
-    gap = max(1, n // 8)
-    strongest_indices = _pick_spread_indices(activation["mean_abs"], top_k=top_k, largest=True, min_gap=gap)
-    weakest_indices = _pick_spread_indices(activation["mean_abs"], top_k=top_k, largest=False, min_gap=gap)
+    segment_frame = _windowed_segment_frame(activation, duration_sec)
+    if segment_frame.empty:
+        return []
+
+    for column in ["mean_abs_mean", "max_abs_peak", "volatility_mean"]:
+        values = pd.to_numeric(segment_frame[column], errors="coerce").fillna(0.0)
+        std_value = float(values.std(ddof=0))
+        if np.isclose(std_value, 0.0):
+            segment_frame[f"{column}_z"] = 0.0
+        else:
+            segment_frame[f"{column}_z"] = (values - float(values.mean())) / std_value
+
+    segment_frame["strength_score"] = (
+        segment_frame["mean_abs_mean_z"] + (0.35 * segment_frame["max_abs_peak_z"]) - (0.1 * segment_frame["volatility_mean_z"])
+    )
+    segment_frame["weakness_score"] = (
+        (-1.0 * segment_frame["mean_abs_mean_z"]) + (0.6 * segment_frame["volatility_mean_z"])
+    )
+
+    strong_segments = segment_frame.sort_values("strength_score", ascending=False).head(top_k + 1)
+    weak_segments = segment_frame.loc[~segment_frame["segment_index"].isin(strong_segments["segment_index"])].sort_values("weakness_score", ascending=False).head(top_k)
 
     moments: list[dict[str, object]] = []
-    for idx in strongest_indices:
-        start_sec = float(activation.iloc[idx]["timestep"]) * seconds_per_step
-        ratio = idx / max(n - 1, 1)
-        label, impact, summary = _moment_label(ratio, is_strong=True)
+    for _, segment in strong_segments.iterrows():
+        start_sec = float(segment["start_sec"])
+        end_sec = float(segment["end_sec"])
+        mid_ratio = float(segment["mid_sec"]) / max(duration_sec, 1.0)
+        segment_events = _events_for_window(aligned_events, start_sec, end_sec)
+        label, impact, summary = _segment_moment_label(mid_ratio, end_sec / max(duration_sec, 1.0), is_strong=True, segment_events=segment_events)
         moments.append(
             {
-                "id": f"strong-{idx}",
+                "id": f"strong-segment-{int(segment['segment_index'])}",
                 "start_sec": round(start_sec, 2),
-                "end_sec": round(start_sec + seconds_per_step, 2),
+                "end_sec": round(end_sec, 2),
                 "label": label,
                 "summary": summary,
                 "impact": impact,
-                "frame_index": int(idx),
+                "frame_index": int(segment["start_idx"]),
                 "timestamp_label": _format_timestamp(start_sec),
                 "kind": "strong",
             }
         )
-    for idx in weakest_indices:
-        start_sec = float(activation.iloc[idx]["timestep"]) * seconds_per_step
-        ratio = idx / max(n - 1, 1)
-        label, impact, summary = _moment_label(ratio, is_strong=False)
+    for _, segment in weak_segments.iterrows():
+        start_sec = float(segment["start_sec"])
+        end_sec = float(segment["end_sec"])
+        mid_ratio = float(segment["mid_sec"]) / max(duration_sec, 1.0)
+        segment_events = _events_for_window(aligned_events, start_sec, end_sec)
+        label, impact, summary = _segment_moment_label(mid_ratio, end_sec / max(duration_sec, 1.0), is_strong=False, segment_events=segment_events)
         moments.append(
             {
-                "id": f"weak-{idx}",
+                "id": f"weak-segment-{int(segment['segment_index'])}",
                 "start_sec": round(start_sec, 2),
-                "end_sec": round(start_sec + seconds_per_step, 2),
+                "end_sec": round(end_sec, 2),
                 "label": label,
                 "summary": summary,
                 "impact": impact,
-                "frame_index": int(idx),
+                "frame_index": int(segment["start_idx"]),
                 "timestamp_label": _format_timestamp(start_sec),
                 "kind": "weak",
             }
@@ -726,6 +944,7 @@ def build_customer_report(
     confidence = _confidence_payload(neighbors)
     creative_tracks = _build_track_payload(reference_frame, summary)
     creative_profile = _creative_profile(creative_tracks)
+    peer_takeaways = _peer_takeaways(reference_frame, summary, neighbors, target_scores)
 
     for target in FOCUS_TARGETS:
         outward_name = TARGET_NAMES[target]
@@ -764,7 +983,7 @@ def build_customer_report(
 
     aligned_events = _build_event_alignment(features_dir, ad_id, title, brand)
     moments = _attach_events_to_moments(
-        _moment_payload(features_dir, float(summary.get("duration_sec", 0.0))),
+        _moment_payload(features_dir, float(summary.get("duration_sec", 0.0)), aligned_events),
         aligned_events,
     )
     frame_count = len(list((features_dir / "brain_frames").glob("frame_*.png")))
@@ -797,6 +1016,7 @@ def build_customer_report(
         "summary": summary_payload,
         "confidence": confidence,
         "creative_profile": creative_profile,
+        "peer_takeaways": peer_takeaways,
         "tracks": creative_tracks,
         "strengths": strengths,
         "risks": risks,
@@ -845,6 +1065,8 @@ def build_customer_report(
             f"- {payload['label']}: {payload['band'].replace('_', ' ')}, "
             f"{payload['percentile']:.0f}th percentile. {payload['short_description']}"
         )
+    if report["peer_takeaways"]:
+        lines.extend(["", "## Compared With Similar Ads", *[f"- {item}" for item in report["peer_takeaways"]]])
     if strengths:
         lines.extend(["", "## Strengths", *[f"- {item}" for item in strengths]])
     if risks:
