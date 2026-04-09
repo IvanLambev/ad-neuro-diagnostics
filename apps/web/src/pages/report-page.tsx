@@ -56,7 +56,7 @@ function useAuthenticatedAssetUrl(sourceUrl?: string) {
     let isCancelled = false;
 
     async function loadAsset() {
-      setState({ loading: true, url: undefined, error: undefined });
+      setState((previous) => ({ loading: true, url: previous.url, error: undefined }));
       try {
         const token = await auth.getToken();
         const response = await fetch(requestedUrl, {
@@ -114,7 +114,18 @@ function ProtectedImage({
   }
 
   if (asset.url) {
-    return <img alt={alt} className={className} src={asset.url} />;
+    return (
+      <div className="relative overflow-hidden">
+        <img
+          alt={alt}
+          className={cn(className, "transition-opacity duration-150", asset.loading ? "opacity-92" : "opacity-100")}
+          src={asset.url}
+        />
+        {asset.loading ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-primary/35 to-transparent" />
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -256,7 +267,7 @@ function ReportContent({ report }: { report: AnalysisReport }) {
           <CardHeader className="px-8 py-7">
             <CardTitle>Playback Review</CardTitle>
             <CardDescription>
-              Watch the ad beside the predicted brain response and jump to key beats like YouTube chapters.
+              Review the ad alongside the response map and move through the key moments on the timeline.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 px-8 pb-8">
