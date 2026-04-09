@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useJobQuery, useReportQuery } from "@/api/hooks";
 import { ReportSummaryChart } from "@/components/report-summary-chart";
@@ -7,7 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { type AnalysisReport } from "@/api/types";
+import { useAuthState } from "@/lib/auth";
 import { cn, titleCase } from "@/lib/utils";
+
+const assetBlobUrlCache = new Map<string, string>();
 
 function formatTimestamp(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
@@ -27,38 +31,146 @@ function resolveBrainFrameUrl(template: string | undefined, frameIndex: number) 
   return template.replace("{index}", String(frameIndex));
 }
 
-export function ReportPage() {
-  const { jobId = "" } = useParams();
-  const jobQuery = useJobQuery(jobId);
-  const reportQuery = useReportQuery(jobId, jobQuery.data?.status === "completed");
+function useAuthenticatedAssetUrl(sourceUrl?: string) {
+  const auth = useAuthState();
+  const [state, setState] = useState<{
+    url?: string;
+    loading: boolean;
+    error?: string;
+  }>({ loading: Boolean(sourceUrl) });
+
+  useEffect(() => {
+    if (!sourceUrl) {
+      setState({ loading: false, url: undefined, error: undefined });
+      return;
+    }
+
+    const cachedUrl = assetBlobUrlCache.get(sourceUrl);
+    if (cachedUrl) {
+      setState({ loading: false, url: cachedUrl, error: undefined });
+      return;
+    }
+
+    const requestedUrl = sourceUrl;
+    const controller = new AbortController();
+    let isCancelled = false;
+
+    async function loadAsset() {
+      setState({ loading: true, url: undefined, error: undefined });
+      try {
+        const token = await auth.getToken();
+        const response = await fetch(requestedUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Asset request failed with ${response.status}.`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        assetBlobUrlCache.set(requestedUrl, objectUrl);
+        if (!isCancelled) {
+          setState({ loading: false, url: objectUrl, error: undefined });
+        }
+      } catch (error) {
+        if (controller.signal.aborted || isCancelled) {
+          return;
+        }
+        setState({
+          loading: false,
+          url: undefined,
+          error: error instanceof Error ? error.message : "Unable to load secure media.",
+        });
+      }
+    }
+
+    void loadAsset();
+    return () => {
+      isCancelled = true;
+      controller.abort();
+    };
+  }, [auth, sourceUrl]);
+
+  return state;
+}
+
+function ProtectedImage({
+  sourceUrl,
+  alt,
+  className,
+  fallback,
+}: {
+  sourceUrl?: string;
+  alt: string;
+  className?: string;
+  fallback?: string;
+}) {
+  const asset = useAuthenticatedAssetUrl(sourceUrl);
+
+  if (!sourceUrl) {
+    return fallback ? (
+      <div className={cn("flex items-center justify-center text-sm text-muted-foreground", className)}>{fallback}</div>
+    ) : null;
+  }
+
+  if (asset.url) {
+    return <img alt={alt} className={className} src={asset.url} />;
+  }
+
+  return (
+    <div className={cn("flex items-center justify-center text-sm text-muted-foreground", className)}>
+      {asset.error ?? (asset.loading ? "Loading secure media..." : fallback ?? "Media unavailable.")}
+    </div>
+  );
+}
+
+function ProtectedVideoPlayer({
+  sourceUrl,
+  videoRef,
+  currentTime,
+  durationLabel,
+  onTimeUpdate,
+}: {
+  sourceUrl?: string;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  currentTime: number;
+  durationLabel: string;
+  onTimeUpdate: (time: number) => void;
+}) {
+  const asset = useAuthenticatedAssetUrl(sourceUrl);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>Ad playback</span>
+        <span>
+          {formatTimestamp(currentTime)} / {durationLabel}
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-black/90">
+        {asset.url ? (
+          <video
+            ref={videoRef}
+            className="aspect-video w-full"
+            controls
+            preload="metadata"
+            src={asset.url}
+            onTimeUpdate={(event) => onTimeUpdate(event.currentTarget.currentTime)}
+          />
+        ) : (
+          <div className="flex aspect-video items-center justify-center text-sm text-muted-foreground">
+            {asset.error ?? (asset.loading ? "Loading secure video..." : "Source video is not available for this report.")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReportContent({ report }: { report: AnalysisReport }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
 
-  if (!jobQuery.data) {
-    return <div className="py-14 text-center text-muted-foreground">Loading report...</div>;
-  }
-
-  if (jobQuery.data.status !== "completed") {
-    return (
-      <Card className="rounded-[1.75rem] border-border/70 bg-card/96 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
-        <CardHeader className="px-7 py-7">
-          <CardTitle>Report not ready yet</CardTitle>
-          <CardDescription>This job is still running. Keep watching progress until the report is completed.</CardDescription>
-        </CardHeader>
-        <CardContent className="px-7 pb-7">
-          <Button className="w-fit" asChild>
-            <Link to={`/app/jobs/${jobId}`}>Back to progress</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!reportQuery.data) {
-    return <div className="py-14 text-center text-muted-foreground">Loading structured report...</div>;
-  }
-
-  const report = reportQuery.data;
   const scoreCards = [
     { label: "Attention", value: report.summary.attention },
     { label: "Clarity", value: report.summary.clarity },
@@ -74,8 +186,8 @@ export function ReportPage() {
           report.playback.frame_count - 1,
           Math.max(0, Math.floor(currentTime / report.playback.seconds_per_frame)),
         );
-  const currentFrameUrl = resolveBrainFrameUrl(report.playback.brain_frame_url_template, frameIndex);
-
+  const currentFrameUrl =
+    resolveBrainFrameUrl(report.playback.brain_frame_url_template, frameIndex) ?? report.assets.brain_strongest_url;
   const currentMoment =
     report.moments.find((moment) => currentTime >= moment.start_sec && currentTime < moment.end_sec) ??
     report.moments[0];
@@ -149,28 +261,13 @@ export function ReportPage() {
           </CardHeader>
           <CardContent className="space-y-6 px-8 pb-8">
             <div className="grid gap-5 xl:grid-cols-2">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Ad playback</span>
-                  <span>{formatTimestamp(currentTime)} / {formatTimestamp(fallbackDuration)}</span>
-                </div>
-                <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-black/90">
-                  {report.assets.video_url ? (
-                    <video
-                      ref={videoRef}
-                      className="aspect-video w-full"
-                      controls
-                      preload="metadata"
-                      src={report.assets.video_url}
-                      onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                    />
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center text-sm text-muted-foreground">
-                      Source video is not available for this report.
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ProtectedVideoPlayer
+                sourceUrl={report.assets.video_url}
+                videoRef={videoRef}
+                currentTime={currentTime}
+                durationLabel={formatTimestamp(fallbackDuration)}
+                onTimeUpdate={setCurrentTime}
+              />
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -178,23 +275,12 @@ export function ReportPage() {
                   <span>Frame {frameIndex + 1}{report.playback.frame_count ? ` / ${report.playback.frame_count}` : ""}</span>
                 </div>
                 <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-[radial-gradient(circle_at_top,_rgba(240,178,122,0.12),_rgba(12,10,9,0.92))]">
-                  {currentFrameUrl ? (
-                    <img
-                      alt="Predicted brain response for the current ad moment."
-                      className="aspect-video w-full object-contain"
-                      src={currentFrameUrl}
-                    />
-                  ) : report.assets.brain_strongest_url ? (
-                    <img
-                      alt="Strongest predicted brain response frame."
-                      className="aspect-video w-full object-contain"
-                      src={report.assets.brain_strongest_url}
-                    />
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center text-sm text-muted-foreground">
-                      Brain frames are not available for this report.
-                    </div>
-                  )}
+                  <ProtectedImage
+                    alt="Predicted brain response for the current ad moment."
+                    className="aspect-video w-full object-contain"
+                    sourceUrl={currentFrameUrl}
+                    fallback="Brain frames are not available for this report."
+                  />
                 </div>
               </div>
             </div>
@@ -380,27 +466,21 @@ export function ReportPage() {
             <CardDescription>Keep the technical evidence close enough to trust without leading with it.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-2">
-            {report.assets.activation_curve_url ? (
-              <img
-                alt="Activation curve across the ad."
-                className="rounded-[1.25rem] border border-border/70 bg-background/80"
-                src={report.assets.activation_curve_url}
-              />
-            ) : null}
-            {report.assets.top_roi_timecourses_url ? (
-              <img
-                alt="Top ROI response curves over time."
-                className="rounded-[1.25rem] border border-border/70 bg-background/80"
-                src={report.assets.top_roi_timecourses_url}
-              />
-            ) : null}
-            {report.assets.brain_animation_url ? (
-              <img
-                alt="Animated predicted brain response over the whole ad."
-                className="rounded-[1.25rem] border border-border/70 bg-background/80 md:col-span-2"
-                src={report.assets.brain_animation_url}
-              />
-            ) : null}
+            <ProtectedImage
+              alt="Activation curve across the ad."
+              className="min-h-44 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+              sourceUrl={report.assets.activation_curve_url}
+            />
+            <ProtectedImage
+              alt="Top ROI response curves over time."
+              className="min-h-44 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+              sourceUrl={report.assets.top_roi_timecourses_url}
+            />
+            <ProtectedImage
+              alt="Animated predicted brain response over the whole ad."
+              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain md:col-span-2"
+              sourceUrl={report.assets.brain_animation_url}
+            />
           </CardContent>
         </Card>
       </section>
@@ -428,4 +508,36 @@ export function ReportPage() {
       </Card>
     </div>
   );
+}
+
+export function ReportPage() {
+  const { jobId = "" } = useParams();
+  const jobQuery = useJobQuery(jobId);
+  const reportQuery = useReportQuery(jobId, jobQuery.data?.status === "completed");
+
+  if (!jobQuery.data) {
+    return <div className="py-14 text-center text-muted-foreground">Loading report...</div>;
+  }
+
+  if (jobQuery.data.status !== "completed") {
+    return (
+      <Card className="rounded-[1.75rem] border-border/70 bg-card/96 shadow-[0_16px_50px_rgba(15,23,42,0.06)]">
+        <CardHeader className="px-7 py-7">
+          <CardTitle>Report not ready yet</CardTitle>
+          <CardDescription>This job is still running. Keep watching progress until the report is completed.</CardDescription>
+        </CardHeader>
+        <CardContent className="px-7 pb-7">
+          <Button className="w-fit" asChild>
+            <Link to={`/app/jobs/${jobId}`}>Back to progress</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!reportQuery.data) {
+    return <div className="py-14 text-center text-muted-foreground">Loading structured report...</div>;
+  }
+
+  return <ReportContent report={reportQuery.data} />;
 }
