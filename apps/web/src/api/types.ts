@@ -34,6 +34,16 @@ export type ReportMoment = {
   kind: "strong" | "weak";
 };
 
+export type TrackSummary = {
+  label: string;
+  score: number;
+  percentile: number;
+  band: string;
+  short_description: string;
+  long_description: string;
+  why_it_matters: string[];
+};
+
 export type AnalysisReport = {
   job_id: string;
   status: "completed";
@@ -53,6 +63,11 @@ export type AnalysisReport = {
     score: number;
     label: string;
   };
+  creative_profile: {
+    label: string;
+    summary: string;
+  };
+  tracks: Record<string, TrackSummary>;
   strengths: string[];
   risks: string[];
   similar_ads: Array<{

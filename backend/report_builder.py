@@ -46,6 +46,81 @@ SIMILARITY_FEATURE_TEXT = {
     "brightness_mean": "overall brightness",
 }
 
+TRACK_DEFINITIONS = {
+    "hook_strength": {
+        "label": "Hook strength",
+        "weights": {
+            "mean_abs_early_mean": 0.95,
+            "mean_abs_peak_count": 0.45,
+            "colorfulness_mean": 0.35,
+            "motion_mean": 0.2,
+        },
+    },
+    "clarity_stability": {
+        "label": "Clarity stability",
+        "weights": {
+            "mean_abs_mean": 0.6,
+            "max_abs_std": -0.7,
+            "cut_rate": -0.55,
+            "speech_density": -0.45,
+            "brightness_mean": 0.2,
+        },
+    },
+    "value_lift": {
+        "label": "Value lift",
+        "weights": {
+            "mean_abs_late_mean": 0.85,
+            "mean_abs_mid_mean": -0.35,
+            "mean_abs_max": 0.35,
+            "colorfulness_mean": 0.2,
+        },
+    },
+    "trust_close": {
+        "label": "Trust close",
+        "weights": {
+            "mean_abs_late_mean": 0.7,
+            "max_abs_std": -0.55,
+            "cut_rate": -0.45,
+            "speech_density": -0.35,
+            "brightness_mean": 0.15,
+        },
+    },
+}
+
+TRACK_DESCRIPTIONS = {
+    "hook_strength": (
+        "How strongly the first seconds pull people in.",
+        "Fast early pull, opening energy, and whether the ad earns attention before the story settles.",
+    ),
+    "clarity_stability": (
+        "How easy the message feels to stay with over time.",
+        "Stability through pacing, intensity changes, and whether the ad stays readable instead of feeling noisy.",
+    ),
+    "value_lift": (
+        "Whether the ad strengthens around the product, offer, or closing payoff.",
+        "Late-stage lift matters because strong ads often build value instead of peaking too early and fading.",
+    ),
+    "trust_close": (
+        "How steady and reassuring the closing section feels.",
+        "This track is a proxy for whether the final product, brand, or CTA lands with enough stability to reduce friction.",
+    ),
+}
+
+TRACK_COMPONENT_TEXT = {
+    "mean_abs_early_mean": ("stronger early response", "softer early response"),
+    "mean_abs_peak_count": ("more repeated attention beats", "fewer repeated attention beats"),
+    "colorfulness_mean": ("richer color energy", "more restrained color energy"),
+    "motion_mean": ("more motion in the opening", "less motion in the opening"),
+    "mean_abs_mean": ("steadier overall response", "weaker overall response"),
+    "max_abs_std": ("more abrupt intensity swings", "more controlled intensity swings"),
+    "cut_rate": ("faster cutting", "slower cutting"),
+    "speech_density": ("denser speech", "lighter speech load"),
+    "brightness_mean": ("brighter visual framing", "darker visual framing"),
+    "mean_abs_late_mean": ("stronger late-stage lift", "weaker late-stage lift"),
+    "mean_abs_mid_mean": ("a heavier middle section", "a lighter middle section"),
+    "mean_abs_max": ("a stronger standout peak", "a softer standout peak"),
+}
+
 
 def _reference_similarity(reference_frame: pd.DataFrame, new_row: pd.Series, top_k: int = 3) -> pd.DataFrame:
     columns = numeric_feature_columns(reference_frame)
@@ -216,6 +291,117 @@ def _moment_label(position_ratio: float, is_strong: bool) -> tuple[str, list[str
     return "Potential drop-off", ["attention", "clarity"], "This segment looks weaker than the strongest moments in the ad."
 
 
+def _track_band(percentile: float) -> str:
+    if percentile >= 80:
+        return "strong"
+    if percentile >= 60:
+        return "slightly_strong"
+    if percentile <= 20:
+        return "weak"
+    if percentile <= 40:
+        return "slightly_weak"
+    return "average"
+
+
+def _compute_track_value(row: pd.Series, weights: dict[str, float], reference_frame: pd.DataFrame) -> float:
+    total = 0.0
+    for feature, weight in weights.items():
+        if feature not in reference_frame.columns:
+            continue
+        series = pd.to_numeric(reference_frame[feature], errors="coerce")
+        if series.dropna().empty:
+            continue
+        mean_value = float(series.mean())
+        std_value = float(series.std(ddof=0))
+        if np.isclose(std_value, 0.0):
+            std_value = 1.0
+        row_value = pd.to_numeric(row.get(feature), errors="coerce")
+        if pd.isna(row_value):
+            row_value = mean_value
+        total += weight * ((float(row_value) - mean_value) / std_value)
+    return total
+
+
+def _build_track_payload(reference_frame: pd.DataFrame, new_row: pd.Series) -> dict[str, dict[str, object]]:
+    payload: dict[str, dict[str, object]] = {}
+    for track_id, track_def in TRACK_DEFINITIONS.items():
+        weights = track_def["weights"]
+        reference_values = reference_frame.apply(lambda row: _compute_track_value(row, weights, reference_frame), axis=1)
+        new_value = _compute_track_value(new_row, weights, reference_frame)
+        mean_value = float(reference_values.mean()) if len(reference_values) else 0.0
+        std_value = float(reference_values.std(ddof=0)) if len(reference_values) else 1.0
+        if np.isclose(std_value, 0.0):
+            std_value = 1.0
+        percentile = float(100.0 * (reference_values <= new_value).sum() / max(len(reference_values), 1))
+        score = float(np.clip(50.0 + (18.0 * ((new_value - mean_value) / std_value)), 0.0, 100.0))
+
+        component_notes: list[tuple[str, float]] = []
+        for feature, weight in weights.items():
+            if feature not in reference_frame.columns:
+                continue
+            series = pd.to_numeric(reference_frame[feature], errors="coerce")
+            if series.dropna().empty:
+                continue
+            mean_feature = float(series.mean())
+            std_feature = float(series.std(ddof=0))
+            if np.isclose(std_feature, 0.0):
+                std_feature = 1.0
+            row_value = pd.to_numeric(new_row.get(feature), errors="coerce")
+            if pd.isna(row_value):
+                continue
+            contribution = weight * ((float(row_value) - mean_feature) / std_feature)
+            component_notes.append((feature, float(contribution)))
+        component_notes.sort(key=lambda item: abs(item[1]), reverse=True)
+        top_components = []
+        for feature, contribution in component_notes[:2]:
+            positive_text, negative_text = TRACK_COMPONENT_TEXT.get(feature, (feature, feature))
+            top_components.append(positive_text if contribution >= 0 else negative_text)
+
+        short_text, long_text = TRACK_DESCRIPTIONS[track_id]
+        payload[track_id] = {
+            "label": track_def["label"],
+            "score": round(score, 1),
+            "percentile": round(percentile, 1),
+            "band": _track_band(percentile),
+            "short_description": short_text,
+            "long_description": long_text,
+            "why_it_matters": top_components,
+        }
+    return payload
+
+
+def _creative_profile(track_payload: dict[str, dict[str, object]]) -> dict[str, str]:
+    ranked = sorted(track_payload.items(), key=lambda item: float(item[1]["score"]), reverse=True)
+    weakest = sorted(track_payload.items(), key=lambda item: float(item[1]["score"]))[0]
+    strongest_id, strongest_payload = ranked[0]
+    weakest_id, weakest_payload = weakest
+
+    if strongest_id == "hook_strength" and weakest_id == "trust_close":
+        return {
+            "label": "Punchy opener",
+            "summary": "The ad appears to win early attention more easily than it closes with reassurance or payoff.",
+        }
+    if strongest_id == "clarity_stability":
+        return {
+            "label": "Clear explainer",
+            "summary": "The ad's strongest signal is steady readability rather than sudden spikes or theatrical peaks.",
+        }
+    if strongest_id == "value_lift":
+        return {
+            "label": "Late builder",
+            "summary": "The ad appears to gather strength later, which often helps the product or offer land more clearly.",
+        }
+    if strongest_id == "trust_close":
+        return {
+            "label": "Confident closer",
+            "summary": "The closing section looks calmer and steadier than the rest of the reference set, which can help reduce friction.",
+        }
+    return {
+        "label": str(strongest_payload["label"]),
+        "summary": f"The strongest signal in this cut is {str(strongest_payload['label']).lower()}, while {str(weakest_payload['label']).lower()} still looks less settled.",
+    }
+
+
 def _moment_payload(features_dir: Path, duration_sec: float, top_k: int = 2) -> list[dict[str, object]]:
     activation_path = features_dir / "activation_strength.csv"
     if not activation_path.exists():
@@ -290,6 +476,8 @@ def build_customer_report(
     why: dict[str, list[str]] = {}
     summary_payload: dict[str, dict[str, float | str]] = {}
     confidence = _confidence_payload(neighbors)
+    creative_tracks = _build_track_payload(reference_frame, summary)
+    creative_profile = _creative_profile(creative_tracks)
 
     for target in FOCUS_TARGETS:
         outward_name = TARGET_NAMES[target]
@@ -356,6 +544,8 @@ def build_customer_report(
         },
         "summary": summary_payload,
         "confidence": confidence,
+        "creative_profile": creative_profile,
+        "tracks": creative_tracks,
         "strengths": strengths,
         "risks": risks,
         "similar_ads": [
@@ -395,6 +585,12 @@ def build_customer_report(
         lines.append(
             f"- {label.title()}: {payload['band'].replace('_', ' ')}, "
             f"{payload['percentile']:.0f}th percentile, {payload['confidence_label']} confidence."
+        )
+    lines.extend(["", "## Creative Signals"])
+    for payload in report["tracks"].values():
+        lines.append(
+            f"- {payload['label']}: {payload['band'].replace('_', ' ')}, "
+            f"{payload['percentile']:.0f}th percentile. {payload['short_description']}"
         )
     if strengths:
         lines.extend(["", "## Strengths", *[f"- {item}" for item in strengths]])

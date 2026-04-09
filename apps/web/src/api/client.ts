@@ -42,6 +42,20 @@ export function createApiClient(options: ApiClientOptions) {
         .padStart(2, "0")}`,
       kind: moment.kind ?? (index === 0 ? "strong" : "weak"),
     }));
+    const normalizedTracks = Object.fromEntries(
+      Object.entries(report.tracks ?? {}).map(([trackId, track]) => [
+        trackId,
+        {
+          ...track,
+          score: track.score ?? 50,
+          percentile: track.percentile ?? 50,
+          band: track.band ?? "average",
+          short_description: track.short_description ?? track.label,
+          long_description: track.long_description ?? track.short_description ?? track.label,
+          why_it_matters: track.why_it_matters ?? [],
+        },
+      ]),
+    );
 
     return {
       ...report,
@@ -60,6 +74,11 @@ export function createApiClient(options: ApiClientOptions) {
         memorability: normalizeScore(report.summary.memorability),
       },
       confidence: report.confidence ?? { score: 0.35, label: "exploratory" },
+      creative_profile: report.creative_profile ?? {
+        label: "Exploratory profile",
+        summary: "The report does not yet have enough structured signals to assign a stronger creative profile.",
+      },
+      tracks: normalizedTracks,
       moments: normalizedMoments,
       playback: {
         frame_count: report.playback?.frame_count ?? 0,

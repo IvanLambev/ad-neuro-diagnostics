@@ -374,6 +374,40 @@ function ReportContent({ report }: { report: AnalysisReport }) {
         </Card>
       </section>
 
+      <section className="space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Creative Profile</div>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight">{report.creative_profile.label}</h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">{report.creative_profile.summary}</p>
+          </div>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-4">
+          {Object.entries(report.tracks).map(([trackId, track]) => (
+            <Card key={trackId} className="rounded-[1.6rem] border-border/70 bg-card/96 shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
+              <CardHeader className="space-y-3 px-6 py-6">
+                <div className="flex items-center justify-between gap-3">
+                  <CardDescription>{track.label}</CardDescription>
+                  <Badge variant="secondary">{formatPercentile(track.percentile)}</Badge>
+                </div>
+                <CardTitle className="text-3xl">{track.score.toFixed(0)}</CardTitle>
+                <CardDescription>{track.band.replaceAll("_", " ")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 px-6 pb-6">
+                <p className="text-sm leading-6 text-muted-foreground">{track.short_description}</p>
+                <div className="space-y-2">
+                  {track.why_it_matters.map((reason) => (
+                    <div key={reason} className="rounded-full border border-border/70 bg-secondary/22 px-3 py-1.5 text-xs text-muted-foreground">
+                      {reason}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
