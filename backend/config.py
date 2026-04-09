@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     clerk_audience: str | None = None
     clerk_jwt_leeway_sec: int = 10
 
-    cors_origins_raw: str = Field(default="http://localhost:5173", alias="cors_origins")
+    cors_origins: str = "http://localhost:5173"
     cors_origin_regex: str | None = None
     sse_poll_interval_sec: float = 2.0
 
@@ -64,8 +64,8 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def cors_origins(self) -> list[str]:
-        stripped = self.cors_origins_raw.strip()
+    def cors_origins_list(self) -> list[str]:
+        stripped = self.cors_origins.strip()
         if not stripped:
             return []
         if stripped.startswith("[") and stripped.endswith("]"):
