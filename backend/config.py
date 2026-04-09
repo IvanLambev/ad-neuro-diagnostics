@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-import json
 
 from pydantic import Field
-from pydantic import field_validator
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,26 +39,12 @@ class Settings(BaseSettings):
     clerk_audience: str | None = None
     clerk_jwt_leeway_sec: int = 10
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins_raw: str = Field(default="http://localhost:5173", alias="cors_origins")
     sse_poll_interval_sec: float = 2.0
 
     default_queue: str = "default"
     gpu_queue: str = "gpu"
     gpu_worker_concurrency: int = 1
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, value: object) -> object:
-        if value is None or isinstance(value, list):
-            return value
-        if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped:
-                return []
-            if stripped.startswith("["):
-                return json.loads(stripped)
-            return [item.strip() for item in stripped.split(",") if item.strip()]
-        return value
 
     @model_validator(mode="after")
     def _hydrate_database_url(self) -> "Settings":
@@ -77,6 +61,18 @@ class Settings(BaseSettings):
         if self.auth_mode == "clerk" and (not self.clerk_jwks_url or not self.clerk_issuer):
             raise ValueError("Clerk auth mode requires ADND_CLERK_JWKS_URL and ADND_CLERK_ISSUER.")
         return self
+
+    @property
+    def cors_origins(self) -> list[str]:
+        stripped = self.cors_origins_raw.strip()
+        if not stripped:
+            return []
+        if stripped.startswith("[") and stripped.endswith("]"):
+            inner = stripped[1:-1].strip()
+            if not inner:
+                return []
+            return [item.strip().strip("\"'") for item in inner.split(",") if item.strip()]
+        return [item.strip() for item in stripped.split(",") if item.strip()]
 
     @property
     def uploads_root(self) -> Path:
