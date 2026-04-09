@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     clerk_jwt_leeway_sec: int = 10
 
     cors_origins_raw: str = Field(default="http://localhost:5173", alias="cors_origins")
+    cors_origin_regex: str | None = None
     sse_poll_interval_sec: float = 2.0
 
     default_queue: str = "default"
@@ -73,6 +74,13 @@ class Settings(BaseSettings):
                 return []
             return [item.strip().strip("\"'") for item in inner.split(",") if item.strip()]
         return [item.strip() for item in stripped.split(",") if item.strip()]
+
+    @property
+    def cors_origin_regex_value(self) -> str | None:
+        if not self.cors_origin_regex:
+            return None
+        stripped = self.cors_origin_regex.strip()
+        return stripped or None
 
     @property
     def uploads_root(self) -> Path:

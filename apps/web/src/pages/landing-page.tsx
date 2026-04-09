@@ -68,9 +68,11 @@ export function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex">
-              <Link to="/sign-in">Sign in</Link>
-            </Button>
+            {!auth.isSignedIn ? (
+              <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex">
+                <Link to="/sign-in">Sign in</Link>
+              </Button>
+            ) : null}
             <Button asChild size="sm">
               <Link to={auth.isSignedIn ? "/app" : "/sign-in"}>{auth.isSignedIn ? "Open app" : "Get started"}</Link>
             </Button>

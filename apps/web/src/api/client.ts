@@ -31,17 +31,29 @@ export function createApiClient(options: ApiClientOptions) {
 
   async function request<T>(pathname: string, init?: RequestInit) {
     const token = await options.getToken();
-    const response = await fetch(`${options.apiBaseUrl}${pathname}`, {
-      ...init,
-      headers: {
-        ...(init?.headers ?? {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${options.apiBaseUrl}${pathname}`, {
+        ...init,
+        headers: {
+          ...(init?.headers ?? {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch (error) {
+      throw new Error(
+        "The app could not reach the analysis API. If this is a preview deployment, the backend may not allow this domain yet.",
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || "Request failed.");
+      try {
+        const parsed = JSON.parse(errorText) as { detail?: string };
+        throw new Error(parsed.detail || "Request failed.");
+      } catch {
+        throw new Error(errorText || "Request failed.");
+      }
     }
 
     return (await response.json()) as T;

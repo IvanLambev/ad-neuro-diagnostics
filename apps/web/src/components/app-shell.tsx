@@ -53,7 +53,12 @@ export function AppShell() {
 
           <div className="flex items-center gap-3">
             {auth.clerkEnabled ? (
-              <AuthUserButton />
+              <>
+                <Button asChild size="sm" className="hidden sm:inline-flex">
+                  <NavLink to="/app/new">New analysis</NavLink>
+                </Button>
+                <AuthUserButton />
+              </>
             ) : (
               <>
                 <Button asChild size="sm">

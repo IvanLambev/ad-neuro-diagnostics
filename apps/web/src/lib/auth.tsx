@@ -24,7 +24,12 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (isClerkEnabled) {
     return (
-      <ClerkProvider publishableKey={appConfig.clerkPublishableKey}>
+      <ClerkProvider
+        publishableKey={appConfig.clerkPublishableKey}
+        afterSignOutUrl="/"
+        signInFallbackRedirectUrl="/app"
+        signUpFallbackRedirectUrl="/app"
+      >
         <ClerkBridge>{children}</ClerkBridge>
       </ClerkProvider>
     );
@@ -115,7 +120,7 @@ export function AuthSignInCard() {
   if (auth.clerkEnabled) {
     return (
       <div className="overflow-hidden rounded-[1.75rem] border border-border bg-card p-2 shadow-lg shadow-black/5">
-        <SignIn signUpUrl={undefined} />
+        <SignIn signUpUrl={undefined} forceRedirectUrl="/app" fallbackRedirectUrl="/app" />
       </div>
     );
   }
