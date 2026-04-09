@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from ad_neuro_diagnostics.utils import ensure_dir
 
 from .config import get_settings
-from .db import Base, engine
 from .routers.jobs import router as jobs_router
 
 
@@ -26,7 +25,6 @@ def create_app() -> FastAPI:
         ensure_dir(settings.data_root)
         ensure_dir(settings.uploads_root)
         ensure_dir(settings.jobs_root)
-        Base.metadata.create_all(bind=engine)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -43,4 +41,3 @@ def run() -> None:
     import uvicorn
 
     uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=False)
-

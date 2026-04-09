@@ -1,0 +1,16 @@
+[Unit]
+Description=Ad Neuro Diagnostics TRIBE Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=info
+WorkingDirectory=/home/info/ad-neuro-diagnostics-deploy
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/info/tribev2/.venv/bin/python /home/info/ad-neuro-diagnostics-deploy/scripts/tribe_runner_service.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

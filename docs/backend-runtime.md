@@ -84,6 +84,8 @@ The compose file supports:
 
 - `ADND_HOST_DATA_ROOT`
 - `ADND_HOST_REFERENCE_WORKSPACE`
+- `ADND_CORS_ORIGINS`
+- `ADND_RUN_MIGRATIONS_ON_STARTUP`
 
 ## Bare-Metal Runner Start
 
@@ -98,6 +100,19 @@ python scripts/tribe_runner_service.py
 
 Run it under a system service or process manager in production.
 
+Systemd unit in this repo:
+
+- `deploy/systemd/adnd-tribe-runner.service`
+
+Install example:
+
+```bash
+sudo cp deploy/systemd/adnd-tribe-runner.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now adnd-tribe-runner
+sudo systemctl status adnd-tribe-runner
+```
+
 ## Deployment Sequence
 
 1. Start bare-metal TRIBE runner
@@ -107,3 +122,27 @@ Run it under a system service or process manager in production.
 5. Verify:
    - `GET /health` on API
    - `GET /health` on TRIBE runner
+   - `GET /v1/jobs/{job_id}/events` streams status updates for the frontend
+
+## Database Migrations
+
+The API container now runs `alembic upgrade head` on startup before serving traffic.
+
+Manual commands:
+
+```bash
+alembic upgrade head
+alembic current
+```
+
+## Clerk Production Mode
+
+To switch from development auth to Clerk-backed production auth:
+
+1. Set `ADND_AUTH_MODE=clerk`
+2. Set `ADND_CLERK_JWKS_URL`
+3. Set `ADND_CLERK_ISSUER`
+4. Optionally set `ADND_CLERK_AUDIENCE`
+5. Set `ADND_CORS_ORIGINS` to your Vercel frontend origin
+
+When `ADND_AUTH_MODE=clerk`, startup config now requires the Clerk issuer and JWKS URL.

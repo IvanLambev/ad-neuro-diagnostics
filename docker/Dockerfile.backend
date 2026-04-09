@@ -13,12 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd --create-home --shell /bin/bash appuser
 
 COPY pyproject.toml README.md /app/
+COPY alembic.ini /app/alembic.ini
 COPY ad_neuro_diagnostics /app/ad_neuro_diagnostics
 COPY backend /app/backend
+COPY docker/backend-entrypoint.sh /app/docker/backend-entrypoint.sh
 
 RUN pip install --upgrade pip && \
     pip install -e ".[backend]"
 
+RUN chmod +x /app/docker/backend-entrypoint.sh
 RUN chown -R appuser:appuser /app
 
 USER appuser

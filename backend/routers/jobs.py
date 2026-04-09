@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime
+from datetime import timezone
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 import json
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,13 +17,21 @@ from ad_neuro_diagnostics.utils import ensure_dir
 
 from ..auth import AuthenticatedUser, get_current_user
 from ..config import get_settings
-from ..db import get_db
+from ..db import SessionLocal, get_db
 from ..models import AnalysisJob, JobStatus
 from ..pipeline import run_analysis_job
 from ..schemas import JobCreateResponse, JobRead
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 settings = get_settings()
+
+
+def _serialize_job(job: AnalysisJob) -> dict[str, object]:
+    return JobRead.model_validate(job).model_dump(mode="json")
+
+
+def _event_frame(event: str, payload: dict[str, object]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 def _job_or_404(db: Session, user_id: str, job_id: str) -> AnalysisJob:
@@ -89,6 +100,51 @@ def get_job(
     db: Session = Depends(get_db),
 ) -> AnalysisJob:
     return _job_or_404(db, user.user_id, job_id)
+
+
+@router.get("/{job_id}/events")
+async def stream_job_events(
+    job_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _job_or_404(db, user.user_id, job_id)
+
+    async def _stream() -> object:
+        last_updated_at: str | None = None
+        while True:
+            if await request.is_disconnected():
+                break
+
+            with SessionLocal() as stream_db:
+                job = _job_or_404(stream_db, user.user_id, job_id)
+                payload = _serialize_job(job)
+
+            updated_at = str(payload.get("updated_at") or "")
+            if updated_at != last_updated_at:
+                yield _event_frame("job", payload)
+                last_updated_at = updated_at
+            else:
+                heartbeat = {
+                    "job_id": job_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                yield _event_frame("heartbeat", heartbeat)
+
+            if payload["status"] in {JobStatus.completed.value, JobStatus.failed.value}:
+                break
+            await asyncio.sleep(settings.sse_poll_interval_sec)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{job_id}/report")

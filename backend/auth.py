@@ -44,13 +44,14 @@ def _clerk_user(
 
     token = credentials.credentials
     signing_key = _build_jwk_client(settings.clerk_jwks_url).get_signing_key_from_jwt(token).key
-    payload = jwt.decode(
-        token,
-        signing_key,
-        algorithms=["RS256"],
-        audience=settings.clerk_audience,
-        issuer=settings.clerk_issuer,
-    )
+    decode_kwargs = {
+        "algorithms": ["RS256"],
+        "issuer": settings.clerk_issuer,
+        "leeway": settings.clerk_jwt_leeway_sec,
+    }
+    if settings.clerk_audience:
+        decode_kwargs["audience"] = settings.clerk_audience
+    payload = jwt.decode(token, signing_key, **decode_kwargs)
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject")
@@ -67,4 +68,3 @@ def get_current_user(
     if settings.auth_mode == "clerk":
         return _clerk_user(settings, credentials)
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unsupported auth mode")
-

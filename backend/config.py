@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import json
 
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,23 +39,43 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None
     clerk_audience: str | None = None
+    clerk_jwt_leeway_sec: int = 10
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    sse_poll_interval_sec: float = 2.0
 
     default_queue: str = "default"
     gpu_queue: str = "gpu"
     gpu_worker_concurrency: int = 1
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: object) -> object:
+        if value is None or isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                return json.loads(stripped)
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
+
     @model_validator(mode="after")
     def _hydrate_database_url(self) -> "Settings":
         if self.database_url:
-            return self
-        if not self.postgres_password:
-            raise ValueError("Set ADND_POSTGRES_PASSWORD or ADND_DATABASE_URL before starting the backend.")
-        self.database_url = (
-            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+            db_url = self.database_url
+        else:
+            if not self.postgres_password:
+                raise ValueError("Set ADND_POSTGRES_PASSWORD or ADND_DATABASE_URL before starting the backend.")
+            db_url = (
+                f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            )
+        self.database_url = db_url
+        if self.auth_mode == "clerk" and (not self.clerk_jwks_url or not self.clerk_issuer):
+            raise ValueError("Clerk auth mode requires ADND_CLERK_JWKS_URL and ADND_CLERK_ISSUER.")
         return self
 
     @property
