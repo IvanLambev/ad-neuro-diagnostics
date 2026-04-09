@@ -458,22 +458,33 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             <CardTitle>Visual Evidence</CardTitle>
             <CardDescription>Keep the technical evidence close enough to trust without leading with it.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-3">
-            <ProtectedImage
-              alt="Activation curve across the ad."
-              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
-              sourceUrl={report.assets.activation_curve_url}
-            />
-            <ProtectedImage
-              alt="Top ROI response curves over time."
-              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
-              sourceUrl={report.assets.top_roi_timecourses_url}
-            />
-            <ProtectedImage
-              alt="Animated predicted brain response over the whole ad."
-              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
-              sourceUrl={report.assets.brain_animation_url}
-            />
+          <CardContent className="space-y-5 px-7 pb-7">
+            <div className="grid gap-5 xl:grid-cols-2">
+              <div className="space-y-3">
+                <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Activation Curve</div>
+                <ProtectedImage
+                  alt="Activation curve across the ad."
+                  className="min-h-72 w-full rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+                  sourceUrl={report.assets.activation_curve_url}
+                />
+              </div>
+              <div className="space-y-3">
+                <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Top ROI Timecourses</div>
+                <ProtectedImage
+                  alt="Top ROI response curves over time."
+                  className="min-h-72 w-full rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+                  sourceUrl={report.assets.top_roi_timecourses_url}
+                />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Whole-Ad Brain Animation</div>
+              <ProtectedImage
+                alt="Animated predicted brain response over the whole ad."
+                className="min-h-80 w-full rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+                sourceUrl={report.assets.brain_animation_url}
+              />
+            </div>
           </CardContent>
         </Card>
 

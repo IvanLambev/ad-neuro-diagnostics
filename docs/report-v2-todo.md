@@ -17,6 +17,9 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [ ] Add target-specific confidence so attention, clarity, and memorability can differ in certainty
 - [ ] Add peer-relative narrative lines such as "stronger opening hook than similar ads"
 - [ ] Add calibration and uncertainty language when a new ad is far from the rated library
+- [ ] Add hook score, clarity stability score, value-lift score, and trust-close score
+- [ ] Add segment archetypes such as hook, explainer, emotional lift, brand handoff, and fatigue window
+- [ ] Add shareability / social transmission proxy research track
 
 ## Next Frontend Upgrades
 
@@ -32,6 +35,9 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [ ] Investigate whether certain repeated ROI patterns line up with stronger memorability
 - [ ] Test whether event-aligned summaries are more useful to ad makers than generic moment labels
 - [ ] Explore whether proxy purchase-intent style signals can be described safely without overclaiming
+- [ ] Validate whether early-hook patterns are the most stable forecasting signal in our own ad library
+- [ ] Validate whether trust/risk proxy signals improve CTA-end diagnostics
+- [ ] Validate whether value-lift patterns around product reveal improve comparative reporting
 
 ## Product Guardrails
 
