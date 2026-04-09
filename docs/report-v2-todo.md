@@ -9,6 +9,7 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [x] Add a split report view with ad playback on the left and predicted brain response on the right
 - [x] Add chapter-style timestamp jumps so users can move through moments like YouTube chapters
 - [x] Add first-pass event alignment for transcript density, brand cues, CTA timing, and scene-change bursts
+- [x] Add first-pass visual event detection for text-heavy frames, product-focus frames, logo-like marks, and end cards
 
 ## Next Backend Upgrades
 
@@ -21,7 +22,7 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [ ] Add hook score, clarity stability score, value-lift score, and trust-close score
 - [ ] Add segment archetypes such as hook, explainer, emotional lift, brand handoff, and fatigue window
 - [ ] Add shareability / social transmission proxy research track
-- [ ] Add visual logo / product reveal detection instead of transcript-only brand/logo heuristics
+- [ ] Improve visual event detection from first-pass heuristics into stronger logo, product, and end-card detection
 
 ## Next Frontend Upgrades
 

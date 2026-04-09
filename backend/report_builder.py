@@ -497,6 +497,10 @@ def _build_event_alignment(features_dir: Path, ad_id: str, title: str, brand: st
     aligned_events: list[dict[str, object]] = []
     aligned_events.extend(_speech_density_events(events, duration_sec))
     aligned_events.extend(_detect_cut_events(clip_row))
+    visual_events_path = features_dir / "visual_events.csv"
+    if visual_events_path.exists():
+        visual_events = pd.read_csv(visual_events_path).to_dict(orient="records")
+        aligned_events.extend(visual_events)
     for event in [product_event, brand_event, cta_event]:
         if event is not None:
             aligned_events.append(event)
