@@ -12,6 +12,35 @@ export function createApiClient(options: ApiClientOptions) {
     return mockApi;
   }
 
+  function absolutizeUrl(value?: string) {
+    if (!value) {
+      return value;
+    }
+    if (/^https?:\/\//.test(value)) {
+      return value;
+    }
+    return `${options.apiBaseUrl}${value}`;
+  }
+
+  function normalizeReport(report: AnalysisReport): AnalysisReport {
+    return {
+      ...report,
+      assets: {
+        ...report.assets,
+        video_url: absolutizeUrl(report.assets.video_url),
+        activation_curve_url: absolutizeUrl(report.assets.activation_curve_url),
+        activation_curve_csv_url: absolutizeUrl(report.assets.activation_curve_csv_url),
+        brain_strongest_url: absolutizeUrl(report.assets.brain_strongest_url),
+        brain_animation_url: absolutizeUrl(report.assets.brain_animation_url),
+        top_roi_timecourses_url: absolutizeUrl(report.assets.top_roi_timecourses_url),
+      },
+      playback: {
+        ...report.playback,
+        brain_frame_url_template: absolutizeUrl(report.playback.brain_frame_url_template),
+      },
+    };
+  }
+
   type BackendJob = {
     id: string;
     title: string;
@@ -134,7 +163,10 @@ export function createApiClient(options: ApiClientOptions) {
       const payload = await request<BackendJob>(`/v1/jobs/${jobId}`);
       return buildTimeline(toJob(payload));
     },
-    getReport: (jobId: string) => request<AnalysisReport>(`/v1/jobs/${jobId}/report`),
+    async getReport(jobId: string) {
+      const report = await request<AnalysisReport>(`/v1/jobs/${jobId}/report`);
+      return normalizeReport(report);
+    },
     async createJob(input: CreateJobInput): Promise<CreateJobResponse> {
       const formData = new FormData();
       formData.append("file", input.file);

@@ -161,6 +161,16 @@ def extract_features_for_ad(
     activation = activation_frame(preds)
     activation.to_csv(features_dir / "activation_strength.csv", index=False)
 
+    fig, ax = plt.subplots(figsize=(12, 4.5))
+    ax.plot(activation["timestep"], activation["mean_abs"], label="Mean absolute", linewidth=2)
+    ax.plot(activation["timestep"], activation["max_abs"], label="Max absolute", linewidth=1.5, alpha=0.75)
+    ax.set_title("Activation curve")
+    ax.set_xlabel("Timestep")
+    ax.set_ylabel("Predicted response")
+    ax.legend()
+    fig.savefig(features_dir / "activation_curve.png", dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
     normalized_preds = robust_scale(preds).reshape(preds.shape)
     norm_activation = activation_frame(normalized_preds)
     norm_activation.to_csv(features_dir / "activation_strength_normalized.csv", index=False)

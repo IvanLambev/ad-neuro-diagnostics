@@ -17,6 +17,21 @@ export type ScoreSummary = {
   score: number;
   dataset_mean: number;
   peer_mean: number;
+  percentile: number;
+  confidence_label: string;
+  confidence_score: number;
+};
+
+export type ReportMoment = {
+  id: string;
+  start_sec: number;
+  end_sec: number;
+  label: string;
+  summary: string;
+  impact: string[];
+  frame_index: number;
+  timestamp_label: string;
+  kind: "strong" | "weak";
 };
 
 export type AnalysisReport = {
@@ -34,6 +49,10 @@ export type AnalysisReport = {
     clarity: ScoreSummary;
     memorability: ScoreSummary;
   };
+  confidence: {
+    score: number;
+    label: string;
+  };
   strengths: string[];
   risks: string[];
   similar_ads: Array<{
@@ -42,21 +61,31 @@ export type AnalysisReport = {
     distance: number;
     why_similar: string;
   }>;
-  moments: Array<{
-    start_sec: number;
-    end_sec: number;
-    label: string;
-    impact: string[];
-  }>;
+  moments: ReportMoment[];
   why: Record<string, string[]>;
   assets: {
+    video_url?: string;
     activation_curve_url?: string;
+    activation_curve_csv_url?: string;
     brain_strongest_url?: string;
     brain_animation_url?: string;
+    top_roi_timecourses_url?: string;
+  };
+  playback: {
+    frame_count: number;
+    seconds_per_frame: number;
+    brain_frame_url_template?: string;
+    chapters: Array<{
+      title: string;
+      timestamp_label: string;
+      start_sec: number;
+      frame_index: number;
+    }>;
   };
   technical: {
     top_rois: string[];
     strongest_timestep: number;
+    summary?: Record<string, unknown>;
   };
 };
 

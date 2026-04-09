@@ -36,6 +36,16 @@ FEATURE_PLAIN_ENGLISH = {
     "duration_sec_y": ("a longer runtime", "a shorter runtime"),
 }
 
+SIMILARITY_FEATURE_TEXT = {
+    "duration_sec": "runtime",
+    "cut_rate": "editing pace",
+    "motion_mean": "visual movement",
+    "speech_density": "spoken pace",
+    "colorfulness_mean": "visual color",
+    "audio_loudness_mean": "audio intensity",
+    "brightness_mean": "overall brightness",
+}
+
 
 def _reference_similarity(reference_frame: pd.DataFrame, new_row: pd.Series, top_k: int = 3) -> pd.DataFrame:
     columns = numeric_feature_columns(reference_frame)
@@ -70,6 +80,32 @@ def _weighted_target_predictions(neighbors: pd.DataFrame) -> dict[str, dict[str,
     return payload
 
 
+def _target_percentile(reference_frame: pd.DataFrame, target: str, score: float) -> float:
+    values = pd.to_numeric(reference_frame[target], errors="coerce").dropna().to_numpy(dtype=np.float64)
+    if len(values) == 0:
+        return 50.0
+    direction = TARGET_DIRECTIONS.get(target, 1.0)
+    better_than = (((score - values) * direction) >= 0).sum()
+    return float(100.0 * better_than / len(values))
+
+
+def _confidence_payload(neighbors: pd.DataFrame) -> dict[str, float | str]:
+    if neighbors.empty:
+        return {"score": 0.0, "label": "exploratory"}
+    mean_distance = float(pd.to_numeric(neighbors["distance"], errors="coerce").mean())
+    rating_count = float(pd.to_numeric(neighbors.get("rating_count"), errors="coerce").fillna(1).mean())
+    closeness = float(np.exp(-mean_distance / 10.0))
+    coverage = float(min(rating_count / 3.0, 1.0))
+    score = round((0.75 * closeness) + (0.25 * coverage), 3)
+    if score >= 0.72:
+        label = "high"
+    elif score >= 0.48:
+        label = "moderate"
+    else:
+        label = "exploratory"
+    return {"score": score, "label": label}
+
+
 def _band_for_target(target: str, score: float, dataset_mean: float) -> str:
     delta = (score - dataset_mean) * TARGET_DIRECTIONS.get(target, 1.0)
     if delta >= 0.5:
@@ -86,6 +122,33 @@ def _band_for_target(target: str, score: float, dataset_mean: float) -> str:
 def _plain_driver_text(feature: str, value: float, mean_value: float) -> str:
     high_text, low_text = FEATURE_PLAIN_ENGLISH.get(feature, (f"higher {feature}", f"lower {feature}"))
     return high_text if value >= mean_value else low_text
+
+
+def _similarity_reason(reference_frame: pd.DataFrame, new_row: pd.Series, neighbor_row: pd.Series) -> str:
+    reasons: list[tuple[str, float]] = []
+    for feature, label in SIMILARITY_FEATURE_TEXT.items():
+        if feature not in reference_frame.columns:
+            continue
+        series = pd.to_numeric(reference_frame[feature], errors="coerce")
+        valid = series.notna()
+        if valid.sum() < 3:
+            continue
+        scale = float(series[valid].std(ddof=0))
+        if np.isclose(scale, 0.0):
+            scale = 1.0
+        new_value = pd.to_numeric(new_row.get(feature), errors="coerce")
+        neighbor_value = pd.to_numeric(neighbor_row.get(feature), errors="coerce")
+        if pd.isna(new_value) or pd.isna(neighbor_value):
+            continue
+        distance = abs(float(new_value) - float(neighbor_value)) / scale
+        reasons.append((label, distance))
+    if not reasons:
+        return "Close pacing and response pattern."
+    reasons.sort(key=lambda item: item[1])
+    top_labels = [label for label, _ in reasons[:2]]
+    if len(top_labels) == 1:
+        return f"Similar {top_labels[0]}."
+    return f"Similar {top_labels[0]} and {top_labels[1]}."
 
 
 def _likely_drivers(reference_frame: pd.DataFrame, new_row: pd.Series, target: str, top_k: int = 3) -> list[dict[str, object]]:
@@ -124,6 +187,35 @@ def _likely_drivers(reference_frame: pd.DataFrame, new_row: pd.Series, target: s
     return drivers[:top_k]
 
 
+def _format_timestamp(seconds: float) -> str:
+    total_seconds = max(int(seconds), 0)
+    minutes, secs = divmod(total_seconds, 60)
+    return f"{minutes}:{secs:02d}"
+
+
+def _pick_spread_indices(values: pd.Series, top_k: int, largest: bool = True, min_gap: int = 1) -> list[int]:
+    ordered = values.sort_values(ascending=not largest).index.tolist()
+    selected: list[int] = []
+    for idx in ordered:
+        if all(abs(idx - previous) > min_gap for previous in selected):
+            selected.append(int(idx))
+        if len(selected) >= top_k:
+            break
+    return selected
+
+
+def _moment_label(position_ratio: float, is_strong: bool) -> tuple[str, list[str], str]:
+    if is_strong and position_ratio <= 0.2:
+        return "Opening hook", ["attention", "clarity"], "The opening is one of the strongest response windows in the ad."
+    if is_strong and position_ratio >= 0.72:
+        return "Closing memory lift", ["memorability", "attention"], "The later section lands with relatively strong predicted response."
+    if is_strong:
+        return "High attention beat", ["attention"], "This moment stands out as one of the stronger response windows."
+    if position_ratio <= 0.35:
+        return "Early clarity dip", ["clarity"], "This early segment may be harder to follow than the surrounding moments."
+    return "Potential drop-off", ["attention", "clarity"], "This segment looks weaker than the strongest moments in the ad."
+
+
 def _moment_payload(features_dir: Path, duration_sec: float, top_k: int = 2) -> list[dict[str, object]]:
     activation_path = features_dir / "activation_strength.csv"
     if not activation_path.exists():
@@ -133,22 +225,46 @@ def _moment_payload(features_dir: Path, duration_sec: float, top_k: int = 2) -> 
         return []
     n = len(activation)
     seconds_per_step = duration_sec / max(n, 1)
-    strongest = activation.nlargest(top_k, "mean_abs")
-    weakest = activation.nsmallest(top_k, "mean_abs")
+    gap = max(1, n // 8)
+    strongest_indices = _pick_spread_indices(activation["mean_abs"], top_k=top_k, largest=True, min_gap=gap)
+    weakest_indices = _pick_spread_indices(activation["mean_abs"], top_k=top_k, largest=False, min_gap=gap)
 
     moments: list[dict[str, object]] = []
-    for row, label in ((strongest, "Strong moment"), (weakest, "Potential drop-off moment")):
-        for item in row.itertuples():
-            start_sec = float(item.timestep) * seconds_per_step
-            moments.append(
-                {
-                    "start_sec": round(start_sec, 2),
-                    "end_sec": round(start_sec + seconds_per_step, 2),
-                    "label": label,
-                    "impact": ["attention"],
-                }
-            )
-    moments.sort(key=lambda item: (item["start_sec"], item["label"]))
+    for idx in strongest_indices:
+        start_sec = float(activation.iloc[idx]["timestep"]) * seconds_per_step
+        ratio = idx / max(n - 1, 1)
+        label, impact, summary = _moment_label(ratio, is_strong=True)
+        moments.append(
+            {
+                "id": f"strong-{idx}",
+                "start_sec": round(start_sec, 2),
+                "end_sec": round(start_sec + seconds_per_step, 2),
+                "label": label,
+                "summary": summary,
+                "impact": impact,
+                "frame_index": int(idx),
+                "timestamp_label": _format_timestamp(start_sec),
+                "kind": "strong",
+            }
+        )
+    for idx in weakest_indices:
+        start_sec = float(activation.iloc[idx]["timestep"]) * seconds_per_step
+        ratio = idx / max(n - 1, 1)
+        label, impact, summary = _moment_label(ratio, is_strong=False)
+        moments.append(
+            {
+                "id": f"weak-{idx}",
+                "start_sec": round(start_sec, 2),
+                "end_sec": round(start_sec + seconds_per_step, 2),
+                "label": label,
+                "summary": summary,
+                "impact": impact,
+                "frame_index": int(idx),
+                "timestamp_label": _format_timestamp(start_sec),
+                "kind": "weak",
+            }
+        )
+    moments.sort(key=lambda item: (float(item["start_sec"]), str(item["kind"])))
     return moments
 
 
@@ -173,6 +289,7 @@ def build_customer_report(
     risks: list[str] = []
     why: dict[str, list[str]] = {}
     summary_payload: dict[str, dict[str, float | str]] = {}
+    confidence = _confidence_payload(neighbors)
 
     for target in FOCUS_TARGETS:
         outward_name = TARGET_NAMES[target]
@@ -180,11 +297,15 @@ def build_customer_report(
         dataset_mean = dataset_means[target]
         peer_mean = float(pd.to_numeric(neighbors[target], errors="coerce").mean())
         band = _band_for_target(target, score, dataset_mean)
+        percentile = _target_percentile(reference_frame, target, score)
         summary_payload[outward_name] = {
             "band": band,
             "score": round(score, 3),
             "dataset_mean": round(dataset_mean, 3),
             "peer_mean": round(peer_mean, 3),
+            "percentile": round(percentile, 1),
+            "confidence_label": str(confidence["label"]),
+            "confidence_score": float(confidence["score"]),
         }
 
         drivers = _likely_drivers(reference_frame, summary, target)
@@ -205,6 +326,25 @@ def build_customer_report(
             elif band in {"weak", "slightly_weak"}:
                 risks.append("The ad may be less memorable than similar ads.")
 
+    moments = _moment_payload(features_dir, float(summary.get("duration_sec", 0.0)))
+    frame_count = len(list((features_dir / "brain_frames").glob("frame_*.png")))
+    seconds_per_frame = float(summary.get("duration_sec", 0.0)) / max(frame_count, 1) if frame_count else 0.0
+    chapters = [
+        {
+            "title": str(moment["label"]),
+            "timestamp_label": str(moment["timestamp_label"]),
+            "start_sec": float(moment["start_sec"]),
+            "frame_index": int(moment["frame_index"]),
+        }
+        for moment in moments
+    ]
+
+    activation_curve_plot = features_dir / "activation_curve.png"
+    activation_curve_csv = features_dir / "activation_strength.csv"
+    brain_strongest = features_dir / "brain_strongest.png"
+    brain_animation = features_dir / "brain_animation.gif"
+    top_roi_plot = features_dir / "top_roi_timecourses.png"
+
     report = {
         "job_id": job_id,
         "status": "completed",
@@ -215,6 +355,7 @@ def build_customer_report(
             "duration_sec": float(summary.get("duration_sec", 0.0)),
         },
         "summary": summary_payload,
+        "confidence": confidence,
         "strengths": strengths,
         "risks": risks,
         "similar_ads": [
@@ -222,16 +363,25 @@ def build_customer_report(
                 "ad_id": row.ad_id,
                 "brand": row.brand,
                 "distance": round(float(row.distance), 3),
-                "why_similar": "Close pacing and response pattern",
+                "why_similar": _similarity_reason(reference_frame, summary, pd.Series(row._asdict())),
             }
             for row in neighbors.itertuples()
         ],
-        "moments": _moment_payload(features_dir, float(summary.get("duration_sec", 0.0))),
+        "moments": moments,
         "why": why,
         "assets": {
-            "activation_curve": "activation_strength.csv",
-            "brain_strongest": "brain_strongest.png",
-            "brain_animation": "brain_animation.gif",
+            "video_url": f"/v1/jobs/{job_id}/assets/source_video",
+            "activation_curve_url": f"/v1/jobs/{job_id}/assets/activation_curve_plot" if activation_curve_plot.exists() else None,
+            "activation_curve_csv_url": f"/v1/jobs/{job_id}/assets/activation_curve_csv" if activation_curve_csv.exists() else None,
+            "brain_strongest_url": f"/v1/jobs/{job_id}/assets/brain_strongest" if brain_strongest.exists() else None,
+            "brain_animation_url": f"/v1/jobs/{job_id}/assets/brain_animation" if brain_animation.exists() else None,
+            "top_roi_timecourses_url": f"/v1/jobs/{job_id}/assets/top_roi_timecourses" if top_roi_plot.exists() else None,
+        },
+        "playback": {
+            "frame_count": frame_count,
+            "seconds_per_frame": round(seconds_per_frame, 4),
+            "brain_frame_url_template": f"/v1/jobs/{job_id}/assets/brain_frame_{{index}}" if frame_count else None,
+            "chapters": chapters,
         },
         "technical": {
             "top_rois": str(summary.get("top_rois", "")).split(",") if summary.get("top_rois") else [],
@@ -242,7 +392,10 @@ def build_customer_report(
 
     lines = [f"# Customer Report: {title}", "", "## Quick Read"]
     for label, payload in report["summary"].items():
-        lines.append(f"- {label.title()}: {payload['band'].replace('_', ' ')}")
+        lines.append(
+            f"- {label.title()}: {payload['band'].replace('_', ' ')}, "
+            f"{payload['percentile']:.0f}th percentile, {payload['confidence_label']} confidence."
+        )
     if strengths:
         lines.extend(["", "## Strengths", *[f"- {item}" for item in strengths]])
     if risks:

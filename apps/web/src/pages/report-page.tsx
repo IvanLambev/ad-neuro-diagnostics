@@ -1,15 +1,38 @@
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useJobQuery, useReportQuery } from "@/api/hooks";
 import { ReportSummaryChart } from "@/components/report-summary-chart";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { cn, titleCase } from "@/lib/utils";
+
+function formatTimestamp(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function formatPercentile(value: number) {
+  return `${Math.round(value)}th percentile`;
+}
+
+function resolveBrainFrameUrl(template: string | undefined, frameIndex: number) {
+  if (!template) {
+    return undefined;
+  }
+  return template.replace("{index}", String(frameIndex));
+}
 
 export function ReportPage() {
   const { jobId = "" } = useParams();
   const jobQuery = useJobQuery(jobId);
   const reportQuery = useReportQuery(jobId, jobQuery.data?.status === "completed");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
 
   if (!jobQuery.data) {
     return <div className="py-14 text-center text-muted-foreground">Loading report...</div>;
@@ -42,42 +65,195 @@ export function ReportPage() {
     { label: "Memorability", value: report.summary.memorability },
   ];
 
+  const fallbackDuration =
+    report.ad.duration_sec > 0 ? report.ad.duration_sec : Math.max(...report.moments.map((moment) => moment.end_sec), 1);
+  const frameIndex =
+    !report.playback.frame_count || !report.playback.seconds_per_frame
+      ? report.technical.strongest_timestep ?? 0
+      : Math.min(
+          report.playback.frame_count - 1,
+          Math.max(0, Math.floor(currentTime / report.playback.seconds_per_frame)),
+        );
+  const currentFrameUrl = resolveBrainFrameUrl(report.playback.brain_frame_url_template, frameIndex);
+
+  const currentMoment =
+    report.moments.find((moment) => currentTime >= moment.start_sec && currentTime < moment.end_sec) ??
+    report.moments[0];
+  const chapterItems = (report.playback.chapters.length ? report.playback.chapters : report.moments).map((chapter) => ({
+    key: "title" in chapter ? chapter.title : chapter.label,
+    title: "title" in chapter ? chapter.title : chapter.label,
+    timestampLabel: chapter.timestamp_label,
+    startSec: chapter.start_sec,
+  }));
+
+  const jumpToTime = (seconds: number) => {
+    const video = videoRef.current;
+    if (!video) {
+      setCurrentTime(seconds);
+      return;
+    }
+    video.currentTime = seconds;
+    void video.play().catch(() => {
+      // Autoplay can be blocked after a seek, which is fine.
+    });
+    setCurrentTime(seconds);
+  };
+
   return (
     <div className="space-y-10">
       <section className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
           <div className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Report view</div>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight">{report.ad.title}</h1>
-          <p className="mt-3 text-base leading-7 text-muted-foreground">{[report.ad.brand, report.ad.campaign, `${report.ad.duration_sec}s`].join(" / ")}</p>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">
+            {[report.ad.brand, report.ad.campaign, `${report.ad.duration_sec}s`].filter(Boolean).join(" / ")}
+          </p>
         </div>
-        <Button asChild variant="outline">
-          <Link to="/app/library">Open historical library</Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="outline" className="px-3 py-1 text-xs uppercase tracking-[0.18em]">
+            {titleCase(report.confidence.label)} confidence
+          </Badge>
+          <Button asChild variant="outline">
+            <Link to="/app/library">Open historical library</Link>
+          </Button>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         {scoreCards.map((item) => (
           <Card key={item.label} className="rounded-[1.75rem] border-border/70 bg-card/96 shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
-            <CardHeader className="px-6 py-6">
-              <CardDescription>{item.label}</CardDescription>
+            <CardHeader className="space-y-4 px-6 py-6">
+              <div className="flex items-center justify-between gap-3">
+                <CardDescription>{item.label}</CardDescription>
+                <Badge variant="secondary">{formatPercentile(item.value.percentile)}</Badge>
+              </div>
               <CardTitle className="text-4xl">{item.value.score.toFixed(2)}</CardTitle>
-              <CardDescription>{item.value.band.replaceAll("_", " ")}</CardDescription>
+              <div className="space-y-2">
+                <CardDescription>{item.value.band.replaceAll("_", " ")}</CardDescription>
+                <div className="text-sm text-muted-foreground">
+                  {titleCase(item.value.confidence_label)} confidence, peer mean {item.value.peer_mean.toFixed(2)}
+                </div>
+              </div>
             </CardHeader>
           </Card>
         ))}
       </section>
 
-      <section className="grid gap-8 xl:grid-cols-[1fr_0.92fr]">
+      <section className="grid gap-8 xl:grid-cols-[1.18fr_0.82fr]">
+        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+          <CardHeader className="px-8 py-7">
+            <CardTitle>Playback Review</CardTitle>
+            <CardDescription>
+              Watch the ad beside the predicted brain response and jump to key beats like YouTube chapters.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 px-8 pb-8">
+            <div className="grid gap-5 xl:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Ad playback</span>
+                  <span>{formatTimestamp(currentTime)} / {formatTimestamp(fallbackDuration)}</span>
+                </div>
+                <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-black/90">
+                  {report.assets.video_url ? (
+                    <video
+                      ref={videoRef}
+                      className="aspect-video w-full"
+                      controls
+                      preload="metadata"
+                      src={report.assets.video_url}
+                      onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                    />
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center text-sm text-muted-foreground">
+                      Source video is not available for this report.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Predicted response view</span>
+                  <span>Frame {frameIndex + 1}{report.playback.frame_count ? ` / ${report.playback.frame_count}` : ""}</span>
+                </div>
+                <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-[radial-gradient(circle_at_top,_rgba(240,178,122,0.12),_rgba(12,10,9,0.92))]">
+                  {currentFrameUrl ? (
+                    <img
+                      alt="Predicted brain response for the current ad moment."
+                      className="aspect-video w-full object-contain"
+                      src={currentFrameUrl}
+                    />
+                  ) : report.assets.brain_strongest_url ? (
+                    <img
+                      alt="Strongest predicted brain response frame."
+                      className="aspect-video w-full object-contain"
+                      src={report.assets.brain_strongest_url}
+                    />
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center text-sm text-muted-foreground">
+                      Brain frames are not available for this report.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-border/70 bg-secondary/18 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Current chapter</div>
+                  <div className="mt-2 text-xl font-semibold text-foreground">
+                    {currentMoment?.label ?? "Playback overview"}
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                    {currentMoment?.summary ?? "Use the chapters below to jump to the strongest and weakest moments."}
+                  </p>
+                </div>
+                {currentMoment ? (
+                  <Badge variant={currentMoment.kind === "strong" ? "success" : "warning"}>
+                    {currentMoment.kind === "strong" ? "High-response segment" : "Potential drop-off"}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {chapterItems.map((chapter) => (
+                  <button
+                    key={`${chapter.key}-${chapter.startSec}`}
+                    className="rounded-full border border-border/70 bg-background px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-primary/5"
+                    onClick={() => jumpToTime(chapter.startSec)}
+                    type="button"
+                  >
+                    <span className="font-medium text-foreground">{chapter.timestampLabel}</span>
+                    <span className="ml-2 text-muted-foreground">{chapter.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
             <CardTitle>Quick Read</CardTitle>
             <CardDescription>Benchmark your top-line scores against the wider dataset and similar peers.</CardDescription>
           </CardHeader>
-          <CardContent className="px-8 pb-8">
+          <CardContent className="space-y-5 px-8 pb-8">
             <ReportSummaryChart report={report} />
+            <div className="rounded-[1.35rem] border border-border/70 bg-secondary/18 p-4">
+              <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Overall confidence</div>
+              <div className="mt-2 text-2xl font-semibold">{titleCase(report.confidence.label)}</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                This report is anchored by the nearest rated ads in the current library. Confidence rises when those
+                reference ads are both close and well-covered.
+              </p>
+            </div>
           </CardContent>
         </Card>
+      </section>
 
+      <section className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
             <CardTitle>What This Means</CardTitle>
@@ -87,41 +263,97 @@ export function ReportPage() {
             <div>
               <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Strong moments</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
-                {report.strengths.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
+                {report.strengths.length ? report.strengths.map((item) => <li key={item}>{item}</li>) : <li>Signal is still exploratory for strong claims.</li>}
               </ul>
             </div>
             <Separator />
             <div>
               <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Potential weak moments</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
-                {report.risks.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
+                {report.risks.length ? report.risks.map((item) => <li key={item}>{item}</li>) : <li>No standout risk rose above the current threshold.</li>}
               </ul>
             </div>
           </CardContent>
         </Card>
-      </section>
 
-      <section className="grid gap-8 lg:grid-cols-[0.98fr_1.02fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
-          <CardHeader className="px-7 py-6">
+          <CardHeader className="px-8 py-7">
             <CardTitle>Similar Ads You Should Compare Against</CardTitle>
             <CardDescription>Helpful references from the historical library, not just a raw nearest-neighbor dump.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-7 pb-7">
+          <CardContent className="space-y-4 px-8 pb-8">
             {report.similar_ads.map((ad) => (
               <div key={ad.ad_id} className="rounded-[1.35rem] border border-border/70 bg-secondary/28 p-5">
-                <div className="font-medium text-foreground">{ad.brand}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{ad.why_similar}</div>
-                <div className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">Distance {ad.distance.toFixed(2)}</div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-medium text-foreground">{ad.brand}</div>
+                  <Badge variant="outline">Distance {ad.distance.toFixed(2)}</Badge>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-muted-foreground">{ad.why_similar}</div>
               </div>
             ))}
           </CardContent>
         </Card>
+      </section>
 
+      <section className="grid gap-8 xl:grid-cols-[1.02fr_0.98fr]">
+        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+          <CardHeader className="px-7 py-6">
+            <CardTitle>Moment Timeline</CardTitle>
+            <CardDescription>Use the timestamps like creative review chapters, not just generic peaks.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 px-7 pb-7">
+            {report.moments.map((moment) => (
+              <button
+                key={moment.id}
+                className={cn(
+                  "w-full rounded-[1.25rem] border border-border/70 bg-background/80 p-4 text-left transition hover:border-primary/45 hover:bg-primary/5",
+                  currentMoment?.id === moment.id && "border-primary/60 bg-primary/6",
+                )}
+                onClick={() => jumpToTime(moment.start_sec)}
+                type="button"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium text-foreground">{moment.label}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {moment.timestamp_label} to {formatTimestamp(moment.end_sec)}
+                    </div>
+                  </div>
+                  <Badge variant={moment.kind === "strong" ? "success" : "warning"}>
+                    {moment.kind === "strong" ? "Strong moment" : "Watch closely"}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">{moment.summary}</p>
+                <div className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  {moment.impact.join(" / ")}
+                </div>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+          <CardHeader className="px-7 py-6">
+            <CardTitle>Why The System Thinks That</CardTitle>
+            <CardDescription>Translate the structured signals into plain rationale.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 px-7 pb-7">
+            {Object.entries(report.why).map(([label, reasons]) => (
+              <div key={label} className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-medium capitalize text-foreground">{label}</div>
+                  <Badge variant="secondary">{formatPercentile(report.summary[label as keyof typeof report.summary].percentile)}</Badge>
+                </div>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
+                  {reasons.length ? reasons.map((reason) => <li key={reason}>{reason}</li>) : <li>Not enough stable signal yet.</li>}
+                </ul>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-8 xl:grid-cols-2">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-7 py-6">
             <CardTitle>Historical Benchmark</CardTitle>
@@ -141,43 +373,34 @@ export function ReportPage() {
             ))}
           </CardContent>
         </Card>
-      </section>
-
-      <section className="grid gap-8 lg:grid-cols-[0.96fr_1.04fr]">
-        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
-          <CardHeader className="px-7 py-6">
-            <CardTitle>Strong moments</CardTitle>
-            <CardDescription>Moment-level readout phrased for creative review.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 px-7 pb-7">
-            {report.moments.map((moment) => (
-              <div key={`${moment.label}-${moment.start_sec}`} className="rounded-[1.25rem] border border-border/70 bg-background/80 p-4">
-                <div className="font-medium text-foreground">{moment.label}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {moment.start_sec}s to {moment.end_sec}s
-                </div>
-                <div className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{moment.impact.join(" / ")}</div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
 
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-7 py-6">
-            <CardTitle>Why The System Thinks That</CardTitle>
-            <CardDescription>Translate the structured signals into plain rationale.</CardDescription>
+            <CardTitle>Visual Evidence</CardTitle>
+            <CardDescription>Keep the technical evidence close enough to trust without leading with it.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 px-7 pb-7">
-            {Object.entries(report.why).map(([label, reasons]) => (
-              <div key={label} className="rounded-[1.25rem] border border-border/70 bg-secondary/22 p-4">
-                <div className="font-medium capitalize text-foreground">{label}</div>
-                <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
-                  {reasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-2">
+            {report.assets.activation_curve_url ? (
+              <img
+                alt="Activation curve across the ad."
+                className="rounded-[1.25rem] border border-border/70 bg-background/80"
+                src={report.assets.activation_curve_url}
+              />
+            ) : null}
+            {report.assets.top_roi_timecourses_url ? (
+              <img
+                alt="Top ROI response curves over time."
+                className="rounded-[1.25rem] border border-border/70 bg-background/80"
+                src={report.assets.top_roi_timecourses_url}
+              />
+            ) : null}
+            {report.assets.brain_animation_url ? (
+              <img
+                alt="Animated predicted brain response over the whole ad."
+                className="rounded-[1.25rem] border border-border/70 bg-background/80 md:col-span-2"
+                src={report.assets.brain_animation_url}
+              />
+            ) : null}
           </CardContent>
         </Card>
       </section>
@@ -192,9 +415,11 @@ export function ReportPage() {
             <AccordionItem value="technical">
               <AccordionTrigger>Open the technical appendix</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-2">
-                  <div>Top ROIs: {report.technical.top_rois.join(", ")}</div>
+                <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+                  <div>Top ROIs: {report.technical.top_rois.join(", ") || "Not available"}</div>
                   <div>Strongest timestep: {report.technical.strongest_timestep}</div>
+                  <div>Frame count: {report.playback.frame_count}</div>
+                  <div>Seconds per frame: {report.playback.seconds_per_frame.toFixed(2)}</div>
                 </div>
               </AccordionContent>
             </AccordionItem>

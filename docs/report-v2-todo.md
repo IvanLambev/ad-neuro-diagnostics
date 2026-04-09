@@ -1,0 +1,40 @@
+# Report V2 TODO
+
+This file keeps the higher-value product ideas in one place so we do not lose them when implementation threads branch off.
+
+## In Progress
+
+- [x] Add a synced report schema with percentile, confidence, richer moments, and playback metadata
+- [x] Expose source video, brain frames, activation curve images, and ROI plots through backend asset routes
+- [x] Add a split report view with ad playback on the left and predicted brain response on the right
+- [x] Add chapter-style timestamp jumps so users can move through moments like YouTube chapters
+
+## Next Backend Upgrades
+
+- [ ] Move from simple peak-picking to segmented moments over more meaningful time windows
+- [ ] Tie moments to media events such as scene cuts, speech density changes, and brand reveal timing
+- [ ] Use ROI timecourses directly in the explanation layer instead of relying mostly on compressed summaries
+- [ ] Add target-specific confidence so attention, clarity, and memorability can differ in certainty
+- [ ] Add peer-relative narrative lines such as "stronger opening hook than similar ads"
+- [ ] Add calibration and uncertainty language when a new ad is far from the rated library
+
+## Next Frontend Upgrades
+
+- [ ] Turn the chapter list into a visual timeline rail with stronger hover and active states
+- [ ] Show per-moment overlays on the video player and brain panel during playback
+- [ ] Add side-by-side comparison mode against a selected historical ad
+- [ ] Add a cleaner "what changed" comparison summary when a new ad outperforms or underperforms peers
+- [ ] Improve mobile handling for the synced video and brain layout
+
+## Research Directions
+
+- [ ] Investigate which TRIBE-derived segment signals best predict clarity drops
+- [ ] Investigate whether certain repeated ROI patterns line up with stronger memorability
+- [ ] Test whether event-aligned summaries are more useful to ad makers than generic moment labels
+- [ ] Explore whether proxy purchase-intent style signals can be described safely without overclaiming
+
+## Product Guardrails
+
+- [ ] Keep the language focused on likely response patterns, not causal claims about buying behavior
+- [ ] Keep technical brain language secondary to plain-English creative guidance
+- [ ] Use the historical library as context and comparison, not as a false ground truth

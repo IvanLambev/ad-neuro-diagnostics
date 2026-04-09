@@ -173,13 +173,25 @@ def get_asset(
     if not job.workspace_path or not job.ad_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Job workspace is not ready")
 
+    features_dir = Path(job.workspace_path) / "artifacts" / job.ad_id / "features"
     asset_map = {
-        "activation_curve": Path(job.workspace_path) / "artifacts" / job.ad_id / "features" / "activation_strength.csv",
-        "brain_strongest": Path(job.workspace_path) / "artifacts" / job.ad_id / "features" / "brain_strongest.png",
-        "brain_animation": Path(job.workspace_path) / "artifacts" / job.ad_id / "features" / "brain_animation.gif",
+        "source_video": Path(job.source_path) if job.source_path else None,
+        "activation_curve": features_dir / "activation_strength.csv",
+        "activation_curve_csv": features_dir / "activation_strength.csv",
+        "activation_curve_plot": features_dir / "activation_curve.png",
+        "brain_strongest": features_dir / "brain_strongest.png",
+        "brain_animation": features_dir / "brain_animation.gif",
+        "top_roi_timecourses": features_dir / "top_roi_timecourses.png",
+        "top_roi_timecourses_csv": features_dir / "top_roi_timecourses.csv",
         "customer_report": Path(job.report_markdown_path) if job.report_markdown_path else None,
     }
     asset_path = asset_map.get(asset_name)
+    if asset_path is None and asset_name.startswith("brain_frame_"):
+        try:
+            frame_index = int(asset_name.removeprefix("brain_frame_"))
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found") from exc
+        asset_path = features_dir / "brain_frames" / f"frame_{frame_index:03d}.png"
     if asset_path is None or not asset_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
     return FileResponse(asset_path)
