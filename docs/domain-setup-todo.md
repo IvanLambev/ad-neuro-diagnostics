@@ -4,7 +4,9 @@
 
 - [x] Backend VM is running at `34.118.0.112`
 - [x] `api.ad-diagnosis.site` resolves to the VM IP
+- [x] `https://api.ad-diagnosis.site/health` responds publicly
 - [x] Clerk backend verification is configured on the VM
+- [x] HTTPS reverse proxy is running on the VM with Caddy
 - [ ] Frontend is deployed on Vercel
 - [ ] `ad-diagnosis.site` is connected to Vercel
 - [ ] `www.ad-diagnosis.site` is connected to Vercel
@@ -15,7 +17,8 @@
 ### Cloudflare
 
 - [x] Add `api.ad-diagnosis.site` as an `A` record pointing to `34.118.0.112`
-- [ ] Keep `api` as `DNS only` during initial backend bring-up
+- [x] Keep `api` as `DNS only` during initial backend bring-up
+- [x] Make sure inbound `80` and `443` are open to the VM at the cloud firewall level
 - [ ] Add the frontend domain records exactly as Vercel asks for them
 - [ ] Decide whether the primary frontend URL should be `www.ad-diagnosis.site`
 
@@ -58,6 +61,7 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_bGl2ZS1hYXJkdmFyay04OC5jbGVyay5hY2NvdW50cy5kZ
 ## Notes
 
 - The backend is already enforcing Clerk auth on protected routes.
+- The backend already has HTTPS termination on `api.ad-diagnosis.site` through Caddy.
 - The frontend must send Clerk Bearer tokens to the API.
 - We do not need the Clerk secret key in the browser.
 - If you later move Clerk to a custom production auth domain, we will update the backend issuer and JWKS URL.
