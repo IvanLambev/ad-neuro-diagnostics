@@ -251,7 +251,7 @@ function ReportContent({ report }: { report: AnalysisReport }) {
         ))}
       </section>
 
-      <section className="grid gap-8 xl:grid-cols-[1.18fr_0.82fr]">
+      <section>
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
             <CardTitle>Playback Review</CardTitle>
@@ -319,7 +319,9 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             </div>
           </CardContent>
         </Card>
+      </section>
 
+      <section className="grid gap-8 xl:grid-cols-[0.96fr_1.04fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
             <CardTitle>Quick Read</CardTitle>
@@ -337,15 +339,13 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             </div>
           </CardContent>
         </Card>
-      </section>
 
-      <section className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
-          <CardHeader className="px-8 py-7">
+          <CardHeader className="px-7 py-6">
             <CardTitle>What This Means</CardTitle>
             <CardDescription>Lead with what is working, then make the next edit decisions obvious.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 px-8 pb-8">
+          <CardContent className="space-y-6 px-7 pb-7">
             <div>
               <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Strong moments</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground">
@@ -361,7 +361,9 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             </div>
           </CardContent>
         </Card>
+      </section>
 
+      <section className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-8 py-7">
             <CardTitle>Similar Ads You Should Compare Against</CardTitle>
@@ -439,7 +441,31 @@ function ReportContent({ report }: { report: AnalysisReport }) {
         </Card>
       </section>
 
-      <section className="grid gap-8 xl:grid-cols-2">
+      <section className="space-y-8">
+        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+          <CardHeader className="px-7 py-6">
+            <CardTitle>Visual Evidence</CardTitle>
+            <CardDescription>Keep the technical evidence close enough to trust without leading with it.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-3">
+            <ProtectedImage
+              alt="Activation curve across the ad."
+              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+              sourceUrl={report.assets.activation_curve_url}
+            />
+            <ProtectedImage
+              alt="Top ROI response curves over time."
+              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+              sourceUrl={report.assets.top_roi_timecourses_url}
+            />
+            <ProtectedImage
+              alt="Animated predicted brain response over the whole ad."
+              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
+              sourceUrl={report.assets.brain_animation_url}
+            />
+          </CardContent>
+        </Card>
+
         <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
           <CardHeader className="px-7 py-6">
             <CardTitle>Historical Benchmark</CardTitle>
@@ -459,30 +485,6 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             ))}
           </CardContent>
         </Card>
-
-        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
-          <CardHeader className="px-7 py-6">
-            <CardTitle>Visual Evidence</CardTitle>
-            <CardDescription>Keep the technical evidence close enough to trust without leading with it.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-2">
-            <ProtectedImage
-              alt="Activation curve across the ad."
-              className="min-h-44 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
-              sourceUrl={report.assets.activation_curve_url}
-            />
-            <ProtectedImage
-              alt="Top ROI response curves over time."
-              className="min-h-44 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain"
-              sourceUrl={report.assets.top_roi_timecourses_url}
-            />
-            <ProtectedImage
-              alt="Animated predicted brain response over the whole ad."
-              className="min-h-52 rounded-[1.25rem] border border-border/70 bg-background/80 object-contain md:col-span-2"
-              sourceUrl={report.assets.brain_animation_url}
-            />
-          </CardContent>
-        </Card>
       </section>
 
       <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
@@ -495,11 +497,23 @@ function ReportContent({ report }: { report: AnalysisReport }) {
             <AccordionItem value="technical">
               <AccordionTrigger>Open the technical appendix</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-                  <div>Top ROIs: {report.technical.top_rois.join(", ") || "Not available"}</div>
-                  <div>Strongest timestep: {report.technical.strongest_timestep}</div>
-                  <div>Frame count: {report.playback.frame_count}</div>
-                  <div>Seconds per frame: {report.playback.seconds_per_frame.toFixed(2)}</div>
+                <div className="grid gap-4 pt-2 md:grid-cols-2">
+                  <div className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-sm leading-6 text-muted-foreground">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Top ROIs</div>
+                    <div className="mt-2 text-foreground">{report.technical.top_rois.join(", ") || "Not available"}</div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-sm leading-6 text-muted-foreground">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Strongest timestep</div>
+                    <div className="mt-2 text-foreground">{report.technical.strongest_timestep}</div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-sm leading-6 text-muted-foreground">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Frame count</div>
+                    <div className="mt-2 text-foreground">{report.playback.frame_count}</div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-sm leading-6 text-muted-foreground">
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Seconds per frame</div>
+                    <div className="mt-2 text-foreground">{report.playback.seconds_per_frame.toFixed(2)}</div>
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
