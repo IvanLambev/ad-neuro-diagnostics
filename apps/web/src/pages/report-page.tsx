@@ -457,6 +457,18 @@ function ReportContent({ report }: { report: AnalysisReport }) {
                   </Badge>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{moment.summary}</p>
+                {moment.events?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {moment.events.map((event) => (
+                      <div
+                        key={`${moment.id}-${event.type}-${event.start_sec}`}
+                        className="rounded-full border border-border/70 bg-secondary/20 px-3 py-1.5 text-xs text-muted-foreground"
+                      >
+                        {event.label}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                   {moment.impact.join(" / ")}
                 </div>
@@ -482,6 +494,41 @@ function ReportContent({ report }: { report: AnalysisReport }) {
                 </ul>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section>
+        <Card className="rounded-[2rem] border-border/70 bg-card/96 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+          <CardHeader className="px-7 py-6">
+            <CardTitle>Event Alignment</CardTitle>
+            <CardDescription>
+              Connect the strongest and weakest response windows to pacing, spoken density, brand cues, and CTA timing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 px-7 pb-7 md:grid-cols-2">
+            {report.event_alignment.length ? (
+              report.event_alignment.map((event) => (
+                <button
+                  key={`${event.type}-${event.start_sec}`}
+                  className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-left transition hover:border-primary/45 hover:bg-primary/5"
+                  onClick={() => jumpToTime(event.start_sec)}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="font-medium text-foreground">{event.label}</div>
+                    <Badge variant="outline">{formatTimestamp(event.start_sec)}</Badge>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{event.detail}</p>
+                  {event.text ? <div className="mt-3 text-sm text-foreground">"{event.text}"</div> : null}
+                  <div className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">{event.source}</div>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-[1.25rem] border border-border/70 bg-secondary/18 p-4 text-sm text-muted-foreground">
+                We do not yet have enough timed transcript or pacing cues to align this report to specific ad events.
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>

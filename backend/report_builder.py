@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from ad_neuro_diagnostics.insights import FOCUS_TARGETS, TARGET_DIRECTIONS, load_scored_ads, numeric_feature_columns
-from ad_neuro_diagnostics.manifests import ProjectPaths
+from ad_neuro_diagnostics.manifests import ProjectPaths, load_ads, load_clips
 
 TARGET_NAMES = {
     "engagement": "attention",
@@ -119,6 +119,39 @@ TRACK_COMPONENT_TEXT = {
     "mean_abs_late_mean": ("stronger late-stage lift", "weaker late-stage lift"),
     "mean_abs_mid_mean": ("a heavier middle section", "a lighter middle section"),
     "mean_abs_max": ("a stronger standout peak", "a softer standout peak"),
+}
+
+CTA_KEYWORDS = (
+    "shop",
+    "buy",
+    "order",
+    "learn more",
+    "discover",
+    "visit",
+    "get",
+    "try",
+    "today",
+    "now",
+    "sign up",
+    "call",
+    "experience",
+)
+
+STOP_TOKENS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "your",
+    "you",
+    "our",
+    "now",
+    "today",
+    "sale",
+    "event",
 }
 
 
@@ -289,6 +322,217 @@ def _moment_label(position_ratio: float, is_strong: bool) -> tuple[str, list[str
     if position_ratio <= 0.35:
         return "Early clarity dip", ["clarity"], "This early segment may be harder to follow than the surrounding moments."
     return "Potential drop-off", ["attention", "clarity"], "This segment looks weaker than the strongest moments in the ad."
+
+
+def _workspace_paths_from_features_dir(features_dir: Path) -> ProjectPaths:
+    return ProjectPaths(root=features_dir.parents[2])
+
+
+def _tokenize_keywords(*values: str) -> list[str]:
+    tokens: list[str] = []
+    for value in values:
+        for token in "".join(ch.lower() if ch.isalnum() else " " for ch in value).split():
+            if len(token) < 3 or token in STOP_TOKENS:
+                continue
+            if token not in tokens:
+                tokens.append(token)
+    return tokens
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    coerced = pd.to_numeric(value, errors="coerce")
+    return default if pd.isna(coerced) else float(coerced)
+
+
+def _load_event_frame(features_dir: Path, ad_id: str) -> tuple[pd.DataFrame, pd.Series | None]:
+    workspace = _workspace_paths_from_features_dir(features_dir)
+    raw_path = workspace.raw_dir(ad_id) / "events.csv"
+    if not raw_path.exists():
+        return pd.DataFrame(), None
+    events = pd.read_csv(raw_path)
+    clip_row = None
+    clips = load_clips(workspace)
+    if not clips.empty and ad_id in clips["ad_id"].values:
+        clip_row = clips.loc[clips["ad_id"] == ad_id].iloc[0]
+    return events, clip_row
+
+
+def _speech_density_events(events: pd.DataFrame, duration_sec: float) -> list[dict[str, object]]:
+    words = events.loc[events.get("type") == "Word"].copy() if "type" in events.columns else pd.DataFrame()
+    if words.empty:
+        return []
+    words["start"] = pd.to_numeric(words["start"], errors="coerce").fillna(0.0)
+    window = 2.0
+    bins = np.arange(0.0, max(duration_sec + window, window), window)
+    counts, edges = np.histogram(words["start"], bins=bins)
+    if len(counts) == 0:
+        return []
+    threshold = float(counts.mean() + counts.std(ddof=0))
+    events_out: list[dict[str, object]] = []
+    for idx, count in enumerate(counts):
+        if count < max(threshold, 3):
+            continue
+        start_sec = float(edges[idx])
+        events_out.append(
+            {
+                "type": "speech_density_peak",
+                "label": "Dense speech window",
+                "start_sec": round(start_sec, 2),
+                "end_sec": round(float(edges[idx + 1]), 2),
+                "detail": "The spoken pace becomes relatively dense here, which can add urgency or make the message harder to track.",
+                "source": "events.csv",
+            }
+        )
+    return events_out[:4]
+
+
+def _keyword_event(
+    events: pd.DataFrame,
+    keywords: list[str],
+    event_type: str,
+    label: str,
+    detail: str,
+    source: str,
+) -> dict[str, object] | None:
+    if events.empty or "text" not in events.columns:
+        return None
+    text_frame = events.loc[events["type"].isin(["Sentence", "Text", "Word"])].copy() if "type" in events.columns else events.copy()
+    if text_frame.empty:
+        return None
+    text_frame["text"] = text_frame["text"].fillna("").astype(str)
+    text_frame["start"] = pd.to_numeric(text_frame.get("start"), errors="coerce").fillna(0.0)
+    for keyword in keywords:
+        matches = text_frame.loc[text_frame["text"].str.contains(keyword, case=False, na=False)]
+        if matches.empty:
+            continue
+        row = matches.sort_values("start").iloc[0]
+        return {
+            "type": event_type,
+            "label": label,
+            "start_sec": round(float(row["start"]), 2),
+            "end_sec": round(float(row.get("stop", row["start"])), 2),
+            "detail": detail,
+            "text": str(row["text"]).strip(),
+            "source": source,
+        }
+    return None
+
+
+def _detect_cut_events(clip_row: pd.Series | None) -> list[dict[str, object]]:
+    if clip_row is None:
+        return []
+    clip_path = Path(str(clip_row.get("clip_path", "")))
+    if not clip_path.exists():
+        return []
+    try:
+        from moviepy import VideoFileClip
+
+        with VideoFileClip(str(clip_path)) as clip:
+            duration = float(clip.duration or 0.0)
+            if duration <= 0:
+                return []
+            sample_times = np.linspace(0, max(duration - 1e-3, 0.0), num=max(6, min(60, int(duration * 2) + 1)))
+            frames = np.array([clip.get_frame(float(t)) for t in sample_times], dtype=np.float32)
+            gray = frames.mean(axis=3)
+            diffs = np.abs(np.diff(gray, axis=0)).mean(axis=(1, 2))
+            if len(diffs) == 0:
+                return []
+            threshold = float(diffs.mean() + diffs.std(ddof=0))
+            cut_indices = [idx for idx, value in enumerate(diffs) if value >= threshold]
+    except Exception:
+        return []
+
+    events_out: list[dict[str, object]] = []
+    for idx in cut_indices[:6]:
+        start_sec = float(sample_times[idx + 1])
+        events_out.append(
+            {
+                "type": "scene_cut",
+                "label": "Scene-change burst",
+                "start_sec": round(start_sec, 2),
+                "end_sec": round(start_sec + 0.25, 2),
+                "detail": "A sharper visual transition happens around this point.",
+                "source": "video pacing heuristic",
+            }
+        )
+    return events_out
+
+
+def _build_event_alignment(features_dir: Path, ad_id: str, title: str, brand: str) -> list[dict[str, object]]:
+    workspace = _workspace_paths_from_features_dir(features_dir)
+    events, clip_row = _load_event_frame(features_dir, ad_id)
+    ads = load_ads(workspace)
+    ad_row = ads.loc[ads["ad_id"] == ad_id].iloc[0] if not ads.empty and ad_id in ads["ad_id"].values else None
+
+    duration_sec = 0.0
+    if clip_row is not None:
+        duration_sec = _safe_float(clip_row.get("duration_sec"))
+
+    keyword_tokens = _tokenize_keywords(title, brand, str(ad_row.get("campaign", "")) if ad_row is not None else "")
+    product_event = _keyword_event(
+        events,
+        keyword_tokens,
+        "product_reveal",
+        "Product reveal cue",
+        "A named product or offer-related phrase shows up here in the transcript.",
+        "events.csv transcript heuristic",
+    )
+    brand_event = _keyword_event(
+        events,
+        _tokenize_keywords(brand),
+        "brand_mention",
+        "Brand/logo cue",
+        "A brand cue appears here in the spoken or on-screen text. This is a language-based proxy, not direct logo detection.",
+        "events.csv transcript heuristic",
+    )
+    cta_event = _keyword_event(
+        events,
+        list(CTA_KEYWORDS),
+        "cta_timing",
+        "CTA timing",
+        "The transcript shifts into an action-oriented or offer-oriented phrase here.",
+        "events.csv transcript heuristic",
+    )
+
+    aligned_events: list[dict[str, object]] = []
+    aligned_events.extend(_speech_density_events(events, duration_sec))
+    aligned_events.extend(_detect_cut_events(clip_row))
+    for event in [product_event, brand_event, cta_event]:
+        if event is not None:
+            aligned_events.append(event)
+
+    aligned_events.sort(key=lambda item: float(item["start_sec"]))
+    deduped: list[dict[str, object]] = []
+    seen_keys: set[tuple[str, int]] = set()
+    for event in aligned_events:
+        key = (str(event["type"]), int(float(event["start_sec"])))
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(event)
+    return deduped
+
+
+def _attach_events_to_moments(
+    moments: list[dict[str, object]],
+    aligned_events: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    enriched: list[dict[str, object]] = []
+    for moment in moments:
+        start_sec = float(moment["start_sec"])
+        end_sec = float(moment["end_sec"])
+        matches = [
+            event
+            for event in aligned_events
+            if float(event["start_sec"]) <= end_sec + 1.0 and float(event["end_sec"]) >= max(start_sec - 1.0, 0.0)
+        ]
+        if matches:
+            event_labels = [str(event["label"]) for event in matches[:2]]
+            summary = f"{moment['summary']} Nearby cues: {', '.join(event_labels)}."
+        else:
+            summary = str(moment["summary"])
+        enriched.append({**moment, "events": matches[:3], "summary": summary})
+    return enriched
 
 
 def _track_band(percentile: float) -> str:
@@ -514,7 +758,11 @@ def build_customer_report(
             elif band in {"weak", "slightly_weak"}:
                 risks.append("The ad may be less memorable than similar ads.")
 
-    moments = _moment_payload(features_dir, float(summary.get("duration_sec", 0.0)))
+    aligned_events = _build_event_alignment(features_dir, ad_id, title, brand)
+    moments = _attach_events_to_moments(
+        _moment_payload(features_dir, float(summary.get("duration_sec", 0.0))),
+        aligned_events,
+    )
     frame_count = len(list((features_dir / "brain_frames").glob("frame_*.png")))
     seconds_per_frame = float(summary.get("duration_sec", 0.0)) / max(frame_count, 1) if frame_count else 0.0
     chapters = [
@@ -557,6 +805,7 @@ def build_customer_report(
             }
             for row in neighbors.itertuples()
         ],
+        "event_alignment": aligned_events,
         "moments": moments,
         "why": why,
         "assets": {
@@ -597,6 +846,12 @@ def build_customer_report(
     if risks:
         lines.extend(["", "## Risks", *[f"- {item}" for item in risks]])
     lines.extend(["", "## Similar Ads", *[f"- {item['ad_id']} ({item['brand']})" for item in report["similar_ads"]]])
+    if report["event_alignment"]:
+        lines.extend(["", "## Event Alignment"])
+        for event in report["event_alignment"]:
+            lines.append(
+                f"- {event['label']} at {float(event['start_sec']):.1f}s: {event['detail']}"
+            )
     lines.extend(["", "## Why We Think This"])
     for label, items in report["why"].items():
         lines.append(f"- {label.title()}: {', '.join(items) if items else 'Not enough signal yet.'}")

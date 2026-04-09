@@ -8,11 +8,12 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [x] Expose source video, brain frames, activation curve images, and ROI plots through backend asset routes
 - [x] Add a split report view with ad playback on the left and predicted brain response on the right
 - [x] Add chapter-style timestamp jumps so users can move through moments like YouTube chapters
+- [x] Add first-pass event alignment for transcript density, brand cues, CTA timing, and scene-change bursts
 
 ## Next Backend Upgrades
 
 - [ ] Move from simple peak-picking to segmented moments over more meaningful time windows
-- [ ] Tie moments to media events such as scene cuts, speech density changes, and brand reveal timing
+- [ ] Improve event alignment from first-pass heuristics into more stable segment-level alignment
 - [ ] Use ROI timecourses directly in the explanation layer instead of relying mostly on compressed summaries
 - [ ] Add target-specific confidence so attention, clarity, and memorability can differ in certainty
 - [ ] Add peer-relative narrative lines such as "stronger opening hook than similar ads"
@@ -20,6 +21,7 @@ This file keeps the higher-value product ideas in one place so we do not lose th
 - [ ] Add hook score, clarity stability score, value-lift score, and trust-close score
 - [ ] Add segment archetypes such as hook, explainer, emotional lift, brand handoff, and fatigue window
 - [ ] Add shareability / social transmission proxy research track
+- [ ] Add visual logo / product reveal detection instead of transcript-only brand/logo heuristics
 
 ## Next Frontend Upgrades
 

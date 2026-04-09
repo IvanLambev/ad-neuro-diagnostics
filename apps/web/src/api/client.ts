@@ -41,6 +41,14 @@ export function createApiClient(options: ApiClientOptions) {
         .toString()
         .padStart(2, "0")}`,
       kind: moment.kind ?? (index === 0 ? "strong" : "weak"),
+      events: moment.events ?? [],
+    }));
+    const normalizedEvents = (report.event_alignment ?? []).map((event) => ({
+      ...event,
+      start_sec: event.start_sec ?? 0,
+      end_sec: event.end_sec ?? event.start_sec ?? 0,
+      detail: event.detail ?? "",
+      source: event.source ?? "report heuristic",
     }));
     const normalizedTracks = Object.fromEntries(
       Object.entries(report.tracks ?? {}).map(([trackId, track]) => [
@@ -79,6 +87,7 @@ export function createApiClient(options: ApiClientOptions) {
         summary: "The report does not yet have enough structured signals to assign a stronger creative profile.",
       },
       tracks: normalizedTracks,
+      event_alignment: normalizedEvents,
       moments: normalizedMoments,
       playback: {
         frame_count: report.playback?.frame_count ?? 0,

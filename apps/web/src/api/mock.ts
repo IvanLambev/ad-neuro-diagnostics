@@ -275,6 +275,34 @@ function createReport(job: Job): AnalysisReport {
         why_similar: "Comparable early hook intensity with a lighter middle section.",
       },
     ],
+    event_alignment: [
+      {
+        type: "scene_cut",
+        label: "Scene-change burst",
+        start_sec: 2,
+        end_sec: 2.25,
+        detail: "A sharper visual transition happens around this point.",
+        source: "video pacing heuristic",
+      },
+      {
+        type: "brand_mention",
+        label: "Brand/logo cue",
+        start_sec: 22,
+        end_sec: 23,
+        detail: "A brand cue appears here in the spoken or on-screen text. This is a language-based proxy, not direct logo detection.",
+        text: "The brand lands clearly in the closing line.",
+        source: "events.csv transcript heuristic",
+      },
+      {
+        type: "cta_timing",
+        label: "CTA timing",
+        start_sec: 25,
+        end_sec: 27,
+        detail: "The transcript shifts into an action-oriented or offer-oriented phrase here.",
+        text: "Get yours today.",
+        source: "events.csv transcript heuristic",
+      },
+    ],
     moments: [
       {
         id: "strong-0",
@@ -286,6 +314,7 @@ function createReport(job: Job): AnalysisReport {
         frame_index: 0,
         timestamp_label: "0:00",
         kind: "strong",
+        events: [],
       },
       {
         id: "weak-13",
@@ -297,6 +326,7 @@ function createReport(job: Job): AnalysisReport {
         frame_index: 13,
         timestamp_label: "0:13",
         kind: "weak",
+        events: [],
       },
       {
         id: "strong-22",
@@ -308,6 +338,26 @@ function createReport(job: Job): AnalysisReport {
         frame_index: 22,
         timestamp_label: "0:22",
         kind: "strong",
+        events: [
+          {
+            type: "brand_mention",
+            label: "Brand/logo cue",
+            start_sec: 22,
+            end_sec: 23,
+            detail: "A brand cue appears here in the spoken or on-screen text. This is a language-based proxy, not direct logo detection.",
+            text: "The brand lands clearly in the closing line.",
+            source: "events.csv transcript heuristic",
+          },
+          {
+            type: "cta_timing",
+            label: "CTA timing",
+            start_sec: 25,
+            end_sec: 27,
+            detail: "The transcript shifts into an action-oriented or offer-oriented phrase here.",
+            text: "Get yours today.",
+            source: "events.csv transcript heuristic",
+          },
+        ],
       },
     ],
     why: {

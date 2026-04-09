@@ -32,6 +32,17 @@ export type ReportMoment = {
   frame_index: number;
   timestamp_label: string;
   kind: "strong" | "weak";
+  events?: ReportEvent[];
+};
+
+export type ReportEvent = {
+  type: string;
+  label: string;
+  start_sec: number;
+  end_sec: number;
+  detail: string;
+  text?: string;
+  source: string;
 };
 
 export type TrackSummary = {
@@ -76,6 +87,7 @@ export type AnalysisReport = {
     distance: number;
     why_similar: string;
   }>;
+  event_alignment: ReportEvent[];
   moments: ReportMoment[];
   why: Record<string, string[]>;
   assets: {
