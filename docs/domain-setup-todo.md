@@ -6,6 +6,7 @@
 - [x] `api.ad-diagnosis.site` resolves to the VM IP
 - [x] `https://api.ad-diagnosis.site/health` responds publicly
 - [x] Clerk backend verification is configured on the VM
+- [x] Backend Clerk issuer now points to `https://clerk.ad-diagnosis.site`
 - [x] HTTPS reverse proxy is running on the VM with Caddy
 - [ ] Frontend is deployed on Vercel
 - [ ] `ad-diagnosis.site` is connected to Vercel
@@ -19,7 +20,7 @@
 - [x] Add `api.ad-diagnosis.site` as an `A` record pointing to `34.118.0.112`
 - [x] Keep `api` as `DNS only` during initial backend bring-up
 - [x] Make sure inbound `80` and `443` are open to the VM at the cloud firewall level
-- [ ] Add the frontend domain records exactly as Vercel asks for them
+- [x] Add the frontend domain records exactly as Vercel asks for them
 - [ ] Decide whether the primary frontend URL should be `www.ad-diagnosis.site`
 
 ### Vercel
