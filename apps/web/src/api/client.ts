@@ -23,6 +23,26 @@ export function createApiClient(options: ApiClientOptions) {
   }
 
   function normalizeReport(report: AnalysisReport): AnalysisReport {
+    const normalizeScore = (score: AnalysisReport["summary"]["attention"]) => ({
+      ...score,
+      percentile: score.percentile ?? 50,
+      confidence_label: score.confidence_label ?? "exploratory",
+      confidence_score: score.confidence_score ?? 0.35,
+    });
+    const normalizedMoments = (report.moments ?? []).map((moment, index) => ({
+      id: moment.id ?? `${moment.label}-${index}`,
+      start_sec: moment.start_sec,
+      end_sec: moment.end_sec,
+      label: moment.label,
+      summary: moment.summary ?? "This timestamp stands out relative to the rest of the ad.",
+      impact: moment.impact ?? [],
+      frame_index: moment.frame_index ?? Math.floor(moment.start_sec),
+      timestamp_label: moment.timestamp_label ?? `${Math.floor(moment.start_sec / 60)}:${Math.floor(moment.start_sec % 60)
+        .toString()
+        .padStart(2, "0")}`,
+      kind: moment.kind ?? (index === 0 ? "strong" : "weak"),
+    }));
+
     return {
       ...report,
       assets: {
@@ -34,9 +54,25 @@ export function createApiClient(options: ApiClientOptions) {
         brain_animation_url: absolutizeUrl(report.assets.brain_animation_url),
         top_roi_timecourses_url: absolutizeUrl(report.assets.top_roi_timecourses_url),
       },
+      summary: {
+        attention: normalizeScore(report.summary.attention),
+        clarity: normalizeScore(report.summary.clarity),
+        memorability: normalizeScore(report.summary.memorability),
+      },
+      confidence: report.confidence ?? { score: 0.35, label: "exploratory" },
+      moments: normalizedMoments,
       playback: {
-        ...report.playback,
-        brain_frame_url_template: absolutizeUrl(report.playback.brain_frame_url_template),
+        frame_count: report.playback?.frame_count ?? 0,
+        seconds_per_frame: report.playback?.seconds_per_frame ?? 0,
+        brain_frame_url_template: absolutizeUrl(report.playback?.brain_frame_url_template),
+        chapters:
+          report.playback?.chapters ??
+          normalizedMoments.map((moment) => ({
+            title: moment.label,
+            timestamp_label: moment.timestamp_label,
+            start_sec: moment.start_sec,
+            frame_index: moment.frame_index,
+          })),
       },
     };
   }
